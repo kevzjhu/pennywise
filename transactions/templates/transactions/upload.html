@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload Credit Card Statement</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 2rem;
+        }
+
+        .card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 1.5rem;
+            max-width: 900px;
+            margin: auto;
+        }
+
+        .field {
+            margin-bottom: 1rem;
+        }
+
+        .field label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .errors {
+            color: darkred;
+            margin-bottom: 1rem;
+        }
+
+        .success {
+            color: darkgreen;
+            margin-bottom: 1rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        th,
+        td {
+            border: 1px solid #ccc;
+            padding: 0.5rem;
+            text-align: left;
+        }
+
+        th {
+            background: #f7f7f7;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <h1>Upload credit card statement</h1>
+        <p>Upload a PDF and your transactions will be parsed into the budget database.</p>
+
+        {% if errors %}
+        <div class="errors">
+            <ul>
+                {% for error in errors %}
+                <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if messages %}
+        {% for message in messages %}
+        <div class="success">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
+
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="field">
+                {{ form.statement.label_tag }}<br>
+                {{ form.statement }}
+                {% if form.statement.help_text %}
+                <div class="help-text">{{ form.statement.help_text }}</div>
+                {% endif %}
+                {% if form.statement.errors %}
+                <div class="errors">{{ form.statement.errors }}</div>
+                {% endif %}
+            </div>
+            <button type="submit">Upload PDF</button>
+        </form>
+
+        {% if parsed_transactions %}
+        <h2>Parsed transactions</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Amount</th>
+                    <th>Category</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for txn in parsed_transactions %}
+                <tr>
+                    <td>{{ txn.date }}</td>
+                    <td>{{ txn.description }}</td>
+                    <td>{{ txn.amount }}</td>
+                    <td>{{ txn.category }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+
+        {% if recent_transactions %}
+        <h2>Recent saved transactions</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Amount</th>
+                    <th>Category</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for txn in recent_transactions %}
+                <tr>
+                    <td>{{ txn.date }}</td>
+                    <td>{{ txn.description }}</td>
+                    <td>{{ txn.amount }}</td>
+                    <td>{{ txn.category }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+    </div>
+</body>
+
+</html>
