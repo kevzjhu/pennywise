@@ -1,9 +1,13 @@
 from django import forms
+from .models import Transaction
 
-
-class StatementUploadForm(forms.Form):
-    statement = forms.FileField(
-        label='Credit card statement PDF',
-        help_text='Upload a PDF file containing your credit card statement.',
-        widget=forms.FileInput(attrs={'accept': '.pdf'}),
-    )
+class TransactionForm(forms.ModelForm):
+    class Meta:
+        model = Transaction
+        fields = ['date', 'description', 'amount', 'category']
+        widgets = {
+            'date': forms.DateInput(attrs={'type': 'date'}),
+            'description': forms.TextInput(attrs={'placeholder': 'Enter transaction description'}),
+            'amount': forms.NumberInput(attrs={'step': '0.01', 'placeholder':  'Enter transaction amount'}),
+            'category': forms.Select(attrs={'placeholder': 'Select transaction category'}),
+        }
