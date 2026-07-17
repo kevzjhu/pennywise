@@ -1,0 +1,222 @@
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-visible">
+    <div class="p-5 border-b border-gray-100 flex justify-between items-center">
+        <h2 class="text-lg font-bold text-gray-800">Recent Transactions</h2>
+        {% if current_filters.search or current_filters.categories or current_filters.start_date or current_filters.end_date or current_filters.min_amount or current_filters.max_amount %}
+        <button hx-get="{% url 'home' %}" hx-target="#table-container" hx-push-url="false"
+            class="text-xs font-medium text-gray-500 hover:text-red-600 transition bg-gray-100 px-2.5 py-1 rounded-md">
+            Clear Active Filters ✕
+        </button>
+        {% endif %}
+    </div>
+
+    <div class="overflow-x-auto min-h-[350px] w-full">
+        <table class="w-full text-left border-collapse">
+            <thead>
+                <tr class="bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500 uppercase tracking-wider select-none">
+                    
+                    <!-- 1. DATE HEADER -->
+                    <th class="py-3 px-4 min-w-[160px]">
+                        <div class="relative z-30">
+                            <div class="flex items-center justify-between gap-1">
+                                <span hx-get="?sort_by=date&direction={{ current_filters.next_direction }}&search={{ current_filters.search }}&start_date={{ current_filters.start_date }}&end_date={{ current_filters.end_date }}&min_amount={{ current_filters.min_amount }}&max_amount={{ current_filters.max_amount }}{% for cat in current_filters.categories %}&category={{ cat }}{% endfor %}"
+                                      hx-target="#table-container" hx-push-url="false"
+                                      class="hover:text-gray-900 cursor-pointer flex-grow py-1">
+                                    Date {% if current_filters.sort_by == 'date' %}{% if current_filters.direction == 'asc' %}▲{% else %}▼{% endif %}{% endif %}
+                                </span>
+                                <button onclick="toggleExcelDropdown(event, 'dateMenu')" class="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-700 focus:outline-none">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
+                                </button>
+                            </div>
+
+                            <div id="dateMenu" class="hidden absolute left-0 top-full mt-2 w-60 bg-white border border-gray-200 rounded-xl shadow-xl p-3.5 normal-case tracking-normal font-normal text-gray-700 space-y-3 z-50">
+                                <form hx-get="{% url 'home' %}" hx-target="#table-container" hx-push-url="false" class="space-y-2">
+                                    <input type="hidden" name="sort_by" value="{{ current_filters.sort_by }}">
+                                    <input type="hidden" name="direction" value="{{ current_filters.direction }}">
+                                    <input type="hidden" name="search" value="{{ current_filters.search }}">
+                                    {% for cat in current_filters.categories %}
+                                    <input type="hidden" name="category" value="{{ cat }}">
+                                    {% endfor %}
+                                    <input type="hidden" name="min_amount" value="{{ current_filters.min_amount }}">
+                                    <input type="hidden" name="max_amount" value="{{ current_filters.max_amount }}">
+                                    <div>
+                                        <label class="block text-[10px] uppercase font-bold text-gray-400 mb-0.5">From</label>
+                                        <input type="date" name="start_date" value="{{ current_filters.start_date }}" class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] uppercase font-bold text-gray-400 mb-0.5">To</label>
+                                        <input type="date" name="end_date" value="{{ current_filters.end_date }}" class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                    </div>
+                                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs py-1.5 rounded font-medium transition">Apply Filter</button>
+                                </form>
+                            </div>
+                        </div>
+                    </th>
+
+                    <!-- 2. DESCRIPTION HEADER -->
+                    <th class="py-3 px-4 min-w-[200px]">
+                        <div class="relative z-30">
+                            <div class="flex items-center justify-between gap-1">
+                                <span hx-get="?sort_by=description&direction={{ current_filters.next_direction }}&search={{ current_filters.search }}&start_date={{ current_filters.start_date }}&end_date={{ current_filters.end_date }}&min_amount={{ current_filters.min_amount }}&max_amount={{ current_filters.max_amount }}{% for cat in current_filters.categories %}&category={{ cat }}{% endfor %}"
+                                      hx-target="#table-container" hx-push-url="false"
+                                      class="hover:text-gray-900 cursor-pointer flex-grow py-1">
+                                    Description {% if current_filters.sort_by == 'description' %}{% if current_filters.direction == 'asc' %}▲{% else %}▼{% endif %}{% endif %}
+                                </span>
+                                <button onclick="toggleExcelDropdown(event, 'descMenu')" class="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-700 focus:outline-none">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
+                                </button>
+                            </div>
+
+                            <div id="descMenu" class="hidden absolute left-0 top-full mt-2 w-56 bg-white border border-gray-200 rounded-xl shadow-xl p-3.5 normal-case tracking-normal font-normal text-gray-700 z-50">
+                                <form hx-get="{% url 'home' %}" hx-target="#table-container" hx-push-url="false" class="space-y-2">
+                                    <input type="hidden" name="sort_by" value="{{ current_filters.sort_by }}">
+                                    <input type="hidden" name="direction" value="{{ current_filters.direction }}">
+                                    <input type="hidden" name="start_date" value="{{ current_filters.start_date }}">
+                                    <input type="hidden" name="end_date" value="{{ current_filters.end_date }}">
+                                    <input type="hidden" name="min_amount" value="{{ current_filters.min_amount }}">
+                                    <input type="hidden" name="max_amount" value="{{ current_filters.max_amount }}">
+                                    {% for cat in current_filters.categories %}
+                                    <input type="hidden" name="category" value="{{ cat }}">
+                                    {% endfor %}
+                                    <input type="text" name="search" value="{{ current_filters.search }}" placeholder="Search description..." class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs py-1.5 rounded font-medium transition">Apply Filter</button>
+                                </form>
+                            </div>
+                        </div>
+                    </th>
+
+                    <!-- 3. CATEGORY HEADER -->
+                    <th class="py-3 px-4 min-w-[160px]">
+                        <div class="relative z-30">
+                            <div class="flex items-center justify-between gap-1">
+                                <span hx-get="?sort_by=category&direction={{ current_filters.next_direction }}&search={{ current_filters.search }}&start_date={{ current_filters.start_date }}&end_date={{ current_filters.end_date }}&min_amount={{ current_filters.min_amount }}&max_amount={{ current_filters.max_amount }}{% for cat in current_filters.categories %}&category={{ cat }}{% endfor %}"
+                                      hx-target="#table-container" hx-push-url="false"
+                                      class="hover:text-gray-900 cursor-pointer flex-grow py-1">
+                                    Category {% if current_filters.sort_by == 'category' %}{% if current_filters.direction == 'asc' %}▲{% else %}▼{% endif %}{% endif %}
+                                </span>
+                                <button onclick="toggleExcelDropdown(event, 'catMenu')" class="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-700 focus:outline-none">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
+                                </button>
+                            </div>
+
+                            <div id="catMenu" class="hidden absolute left-0 top-full mt-2 w-52 bg-white border border-gray-200 rounded-xl shadow-xl p-3.5 normal-case tracking-normal font-normal text-gray-700 z-50">
+                                <form hx-get="{% url 'home' %}" hx-target="#table-container" hx-push-url="false" class="space-y-2">
+                                    <input type="hidden" name="sort_by" value="{{ current_filters.sort_by }}">
+                                    <input type="hidden" name="direction" value="{{ current_filters.direction }}">
+                                    <input type="hidden" name="search" value="{{ current_filters.search }}">
+                                    <input type="hidden" name="start_date" value="{{ current_filters.start_date }}">
+                                    <input type="hidden" name="end_date" value="{{ current_filters.end_date }}">
+                                    <input type="hidden" name="min_amount" value="{{ current_filters.min_amount }}">
+                                    <input type="hidden" name="max_amount" value="{{ current_filters.max_amount }}">
+                                    
+                                    <p class="text-[10px] font-bold uppercase text-gray-400 mb-1">Select Categories</p>
+                                    <div class="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                                        {% for value, label in form.fields.category.choices %}
+                                        <label class="flex items-center gap-2 text-xs cursor-pointer hover:bg-gray-50 p-1 rounded">
+                                            <input type="checkbox" name="category" value="{{ value }}" 
+                                                {% if value in current_filters.categories %}checked{% endif %}
+                                                class="rounded border-gray-300 text-blue-600 focus:ring-0">
+                                            <span>{{ label }}</span>
+                                        </label>
+                                        {% endfor %}
+                                    </div>
+                                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs py-1.5 rounded font-medium mt-2 transition">Apply Filter</button>
+                                </form>
+                            </div>
+                        </div>
+                    </th>
+
+                    <!-- 4. AMOUNT HEADER (CLEAN MULTI-FIELD VALUE CHECKING) -->
+                    <th class="py-3 px-4 text-right min-w-[160px]">
+                        <div class="relative z-30">
+                            <div class="flex items-center justify-end gap-1">
+                                <span hx-get="?sort_by=amount&direction={{ current_filters.next_direction }}&search={{ current_filters.search }}&start_date={{ current_filters.start_date }}&end_date={{ current_filters.end_date }}&min_amount={{ current_filters.min_amount }}&max_amount={{ current_filters.max_amount }}{% for cat in current_filters.categories %}&category={{ cat }}{% endfor %}"
+                                      hx-target="#table-container" hx-push-url="false"
+                                      class="hover:text-gray-900 cursor-pointer flex-grow py-1 text-right">
+                                    Amount {% if current_filters.sort_by == 'amount' %}{% if current_filters.direction == 'asc' %}▲{% else %}▼{% endif %}{% endif %}
+                                </span>
+                                <button onclick="toggleExcelDropdown(event, 'amtMenu')" class="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-700 focus:outline-none">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
+                                </button>
+                            </div>
+
+                            <div id="amtMenu" class="hidden absolute right-0 top-full mt-2 w-60 bg-white border border-gray-200 rounded-xl shadow-xl p-3.5 normal-case tracking-normal font-normal text-left text-gray-700 z-50">
+                                <form hx-get="{% url 'home' %}" hx-target="#table-container" hx-push-url="false" onsubmit="return validateAmountRange(this)" class="space-y-3">
+                                    <input type="hidden" name="sort_by" value="{{ current_filters.sort_by }}">
+                                    <input type="hidden" name="direction" value="{{ current_filters.direction }}">
+                                    <input type="hidden" name="search" value="{{ current_filters.search }}">
+                                    <input type="hidden" name="start_date" value="{{ current_filters.start_date }}">
+                                    <input type="hidden" name="end_date" value="{{ current_filters.end_date }}">
+                                    {% for cat in current_filters.categories %}
+                                    <input type="hidden" name="category" value="{{ cat }}">
+                                    {% endfor %}
+
+                                    <div>
+                                        <label class="block text-[10px] uppercase font-bold text-gray-400 mb-0.5">Min Amount ($)</label>
+                                        <input type="number" step="0.01" name="min_amount" id="filter_min_amount" value="{{ current_filters.min_amount }}" oninput="syncAmountConstraints()" placeholder="0.00" class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-[10px] uppercase font-bold text-gray-400 mb-0.5">Max Amount ($)</label>
+                                        <input type="number" step="0.01" name="max_amount" id="filter_max_amount" value="{{ current_filters.max_amount }}" oninput="syncAmountConstraints()" placeholder="0.00" class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                    </div>
+
+                                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs py-1.5 rounded font-medium transition">Apply Filter</button>
+                                </form>
+                            </div>
+                        </div>
+                    </th>
+                    <th class="py-3 px-4 text-center text-gray-500 min-w-[130px]">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 text-sm">
+                {% for tx in transactions %}
+                <tr class="hover:bg-gray-50/50 transition">
+                    <td class="py-3.5 px-4 text-gray-600">{{ tx.date|date:"Y-m-d" }}</td>
+                    <td class="py-3.5 px-4 max-w-xs">
+                        <div class="font-medium text-gray-900">{{ tx.description }}</div>
+                        {% if tx.notes %}
+                        <div class="text-xs text-gray-400 mt-0.5 italic truncate" title="{{ tx.notes }}">{{ tx.notes }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="py-3.5 px-4">
+                        <span class="inline-block px-2.5 py-1 text-xs font-semibold bg-gray-100 text-gray-700 rounded-md">
+                            {{ tx.get_category_display }}
+                        </span>
+                    </td>
+                    <td class="py-3.5 px-4 text-right font-semibold text-gray-900">
+                        ${{ tx.amount }}
+                    </td>
+                    <td class="py-3.5 px-4 text-center">
+                        <div class="flex items-center justify-center gap-2">
+                            <button onclick="openModal('edit', {
+                                    id: '{{ tx.id }}',
+                                    date: '{{ tx.date|date:"Y-m-d" }}',
+                                    description: '{{ tx.description|escapejs }}',
+                                    amount: '{{ tx.amount }}',
+                                    category: '{{ tx.category }}',
+                                    notes: '{{ tx.notes|default:""|escapejs }}'
+                                })"
+                                class="text-blue-600 hover:text-blue-800 font-medium text-xs px-2.5 py-1 rounded bg-blue-50 hover:bg-blue-100 transition">
+                                Edit
+                            </button>
+
+                            <form method="POST" action="{% url 'home' %}" onsubmit="return confirm('Are you sure you want to delete this transaction?');" class="inline">
+                                {% csrf_token %}
+                                <input type="hidden" name="delete_id" value="{{ tx.id }}">
+                                <button type="submit" 
+                                    class="text-red-600 hover:text-red-800 font-medium text-xs px-2.5 py-1 rounded bg-red-50 hover:bg-red-100 transition">
+                                    Delete
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="py-8 text-center text-gray-400">No transactions match your selection.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
