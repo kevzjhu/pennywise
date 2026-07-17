@@ -8,3 +8,5 @@ my budgeting app
 4. enable users to modify the categories (configure/settings)
 5. add analytics (see my own powerbi)
 6. figure out how to import statements
+7. start uat
+8. make it into a phone app too
