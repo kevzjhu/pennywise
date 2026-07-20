@@ -1,12 +1,34 @@
 <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-visible">
-    <div class="p-5 border-b border-gray-100 flex justify-between items-center">
-        <h2 class="text-lg font-bold text-gray-800">Recent Transactions</h2>
-        {% if current_filters.search or current_filters.categories or current_filters.start_date or current_filters.end_date or current_filters.min_amount or current_filters.max_amount %}
-        <button hx-get="{% url 'home' %}" hx-target="#table-container" hx-push-url="false"
-            class="text-xs font-medium text-gray-500 hover:text-red-600 transition bg-gray-100 px-2.5 py-1 rounded-md">
-            Clear Active Filters ✕
-        </button>
-        {% endif %}
+    <!-- Top Bar: Shows Title/Clear Filters OR Bulk Actions when checkboxes are selected -->
+    <div class="p-5 border-b border-gray-100 flex justify-between items-center min-h-[68px]">
+        
+        <!-- Standard Header Title (Hidden when bulk selecting) -->
+        <div id="default-header" class="flex justify-between items-center w-full">
+            <h2 class="text-lg font-bold text-gray-800">Recent Transactions</h2>
+            {% if current_filters.search or current_filters.categories or current_filters.start_date or current_filters.end_date or current_filters.min_amount or current_filters.max_amount %}
+            <button hx-get="{% url 'home' %}" hx-target="#table-container" hx-push-url="false"
+                class="text-xs font-medium text-gray-500 hover:text-red-600 transition bg-gray-100 px-2.5 py-1 rounded-md">
+                Clear Active Filters ✕
+            </button>
+            {% endif %}
+        </div>
+
+        <!-- Bulk Actions Bar (Shown dynamically when at least 1 checkbox is picked) -->
+        <div id="bulk-header" class="hidden flex items-center justify-between w-full">
+            <span class="text-xs font-semibold text-gray-600">
+                <span id="selected-count" class="text-blue-600 font-bold">0</span> items selected
+            </span>
+            <form hx-post="{% url 'home' %}" hx-target="#table-container" id="bulk-delete-form" onsubmit="return confirm('Are you sure you want to delete the selected transactions?');">
+                {% csrf_token %}
+                <input type="hidden" name="action_type" value="bulk_delete">
+                <!-- Container to hold hidden inputs for selected IDs before form submits -->
+                <div id="bulk-ids-container"></div>
+                <button type="submit" 
+                    class="bg-red-50 hover:bg-red-100 text-red-600 font-medium text-xs px-3 py-1.5 rounded-lg border border-red-200 transition cursor-pointer">
+                    🗑️ Delete Selected
+                </button>
+            </form>
+        </div>
     </div>
 
     <div class="overflow-x-auto min-h-[350px] w-full">
@@ -14,6 +36,12 @@
             <thead>
                 <tr class="bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500 uppercase tracking-wider select-none">
                     
+                    <!-- MASTER CHECKBOX COLUMN -->
+                    <th class="py-3 px-4 w-10">
+                        <input type="checkbox" id="select-all-transactions" onclick="toggleSelectAllTransactions(this)" 
+                            class="rounded border-gray-300 text-blue-600 focus:ring-0 cursor-pointer">
+                    </th>
+
                     <!-- 1. DATE HEADER -->
                     <th class="py-3 px-4 min-w-[160px]">
                         <div class="relative z-30">
@@ -125,7 +153,7 @@
                         </div>
                     </th>
 
-                    <!-- 4. AMOUNT HEADER (CLEAN MULTI-FIELD VALUE CHECKING) -->
+                    <!-- 4. AMOUNT HEADER -->
                     <th class="py-3 px-4 text-right min-w-[160px]">
                         <div class="relative z-30">
                             <div class="flex items-center justify-end gap-1">
@@ -170,7 +198,12 @@
             </thead>
             <tbody class="divide-y divide-gray-100 text-sm">
                 {% for tx in transactions %}
-                <tr class="hover:bg-gray-50/50 transition">
+                <tr class="hover:bg-gray-50/50 transition transaction-row">
+                    <!-- ROW CHECKBOX -->
+                    <td class="py-3.5 px-4">
+                        <input type="checkbox" value="{{ tx.id }}" onclick="updateTransactionSelectionUI()"
+                            class="transaction-checkbox rounded border-gray-300 text-blue-600 focus:ring-0 cursor-pointer">
+                    </td>
                     <td class="py-3.5 px-4 text-gray-600">{{ tx.date|date:"Y-m-d" }}</td>
                     <td class="py-3.5 px-4 max-w-xs">
                         <div class="font-medium text-gray-900">{{ tx.description }}</div>
@@ -200,8 +233,9 @@
                                 Edit
                             </button>
 
-                            <form method="POST" action="{% url 'home' %}" onsubmit="return confirm('Are you sure you want to delete this transaction?');" class="inline">
+                            <form hx-post="{% url 'home' %}" hx-target="#table-container" onsubmit="return confirm('Are you sure you want to delete this transaction?');" class="inline">
                                 {% csrf_token %}
+                                <input type="hidden" name="action_type" value="single_delete">
                                 <input type="hidden" name="delete_id" value="{{ tx.id }}">
                                 <button type="submit" 
                                     class="text-red-600 hover:text-red-800 font-medium text-xs px-2.5 py-1 rounded bg-red-50 hover:bg-red-100 transition">
@@ -213,10 +247,46 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="5" class="py-8 text-center text-gray-400">No transactions match your selection.</td>
+                    <td colspan="6" class="py-8 text-center text-gray-400">No transactions match your selection.</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
+
+<script>
+    function toggleSelectAllTransactions(master) {
+        const checkboxes = document.querySelectorAll('.transaction-checkbox');
+        checkboxes.forEach(cb => cb.checked = master.checked);
+        updateTransactionSelectionUI();
+    }
+
+    function updateTransactionSelectionUI() {
+        const checked = document.querySelectorAll('.transaction-checkbox:checked');
+        const defaultHeader = document.getElementById('default-header');
+        const bulkHeader = document.getElementById('bulk-header');
+        const selectedCount = document.getElementById('selected-count');
+        const idsContainer = document.getElementById('bulk-ids-container');
+
+        if (checked.length > 0) {
+            defaultHeader.classList.add('hidden');
+            bulkHeader.classList.remove('hidden');
+            selectedCount.textContent = checked.length;
+
+            idsContainer.innerHTML = '';
+            checked.forEach(cb => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'transaction_ids';
+                input.value = cb.value;
+                idsContainer.appendChild(input);
+            });
+        } else {
+            defaultHeader.classList.remove('hidden');
+            bulkHeader.classList.add('hidden');
+            const masterCb = document.getElementById('select-all-transactions');
+            if (masterCb) masterCb.checked = false;
+        }
+    }
+</script>

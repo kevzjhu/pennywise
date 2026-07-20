@@ -1,13 +1,20 @@
 from django.contrib import admin
-from .models import Transaction
+from .models import Transaction, PaycheckTemplate, PaycheckTransaction
 
 @admin.register(Transaction)
 class TransactionAdmin(admin.ModelAdmin):
-    # Customize what columns show up in the admin table list
-    list_display = ('date', 'description', 'amount', 'category', 'notes')
-    
-    # Add filtering options on the right sidebar
+    list_display = ('date', 'description', 'category', 'amount')
     list_filter = ('category', 'date')
-    
-    # Add a search bar for quick lookups
     search_fields = ('description', 'notes')
+
+@admin.register(PaycheckTemplate)
+class PaycheckTemplateAdmin(admin.ModelAdmin):
+    # Removed 'user' from list_display
+    list_display = ('source_name', 'amount', 'frequency', 'start_date', 'created_at')
+
+@admin.register(PaycheckTransaction)
+class PaycheckTransactionAdmin(admin.ModelAdmin):
+    # Removed 'user' from list_display
+    list_display = ('date', 'source_name', 'amount', 'template')
+    list_filter = ('date', 'source_name')
+    search_fields = ('source_name',)

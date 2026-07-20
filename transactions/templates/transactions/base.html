@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Pennywise{% endblock %}</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- HTMX CDN -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+
+<body class="bg-gray-50 font-sans text-gray-800 antialiased min-h-screen flex flex-col">
+
+    <!-- Top Navigation Menu Bar -->
+    <nav class="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-40">
+        <div class="max-w-5xl mx-auto px-4 md:px-6">
+            <div class="flex justify-between h-16 items-center">
+                
+                <!-- Logo/Brand Title -->
+                <div class="flex items-center gap-2">
+                    <span class="text-xl font-black text-blue-600 tracking-tight">Pennywise</span>
+                </div>
+
+                <!-- Navigation Links Links -->
+                <!-- TIP: request.resolver_match.url_name checks your active Django route to highlight the tab blue! -->
+                <div class="hidden md:flex space-x-1 h-full items-center">
+                    <a href="{% url 'home' %}" 
+                       class="px-3 py-2 rounded-lg text-sm font-medium transition {% if request.resolver_match.url_name == 'home' %}bg-blue-50 text-blue-600{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %}">
+                        Transactions
+                    </a>
+                    <a href="{% url 'income' %}" 
+                       class="px-3 py-2 rounded-lg text-sm font-medium transition {% if request.resolver_match.url_name == 'income' %}bg-blue-50 text-blue-600{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %}">
+                        Income
+                    </a>
+                    <a href="{% url 'budget' %}" 
+                       class="px-3 py-2 rounded-lg text-sm font-medium transition {% if request.resolver_match.url_name == 'budget' %}bg-blue-50 text-blue-600{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %}">
+                        Budget
+                    </a>
+                    <a href="{% url 'analytics' %}" 
+                       class="px-3 py-2 rounded-lg text-sm font-medium transition {% if request.resolver_match.url_name == 'analytics' %}bg-blue-50 text-blue-600{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %}">
+                        Analytics
+                    </a>
+                    <a href="{% url 'settings' %}" 
+                       class="px-3 py-2 rounded-lg text-sm font-medium transition {% if request.resolver_match.url_name == 'settings' %}bg-blue-50 text-blue-600{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %}">
+                        Settings
+                    </a>
+                </div>
+
+                <!-- Simple Mobile Menu Toggle Action (Optional button wrapper layout) -->
+                <div class="md:hidden">
+                    <button onclick="toggleMobileNavMenu()" class="text-gray-500 hover:text-gray-700 p-2 focus:outline-none">
+                        ☰
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Collapsible Dropdown Nav for Mobile Layout Panels -->
+        <div id="mobileNavMenu" class="hidden md:hidden border-t border-gray-100 bg-white px-4 py-2 space-y-1">
+            <a href="{% url 'home' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">Transactions</a>
+            <a href="{% url 'income' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">Income</a>
+            <a href="{% url 'budget' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">Budgets</a>
+            <a href="{% url 'analytics' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">Analytics</a>
+            <a href="{% url 'settings' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">Settings</a>
+        </div>
+    </nav>
+
+    <!-- Main Dynamic Content Wrapper -->
+    <main class="max-w-5xl w-full mx-auto p-6 md:p-10 flex-grow">
+        {% block content %}
+        <!-- Child pages will swap their unique structures in here! -->
+        {% endblock %}
+    </main>
+
+    <!-- Script for tracking mobile menu collapses -->
+    <script>
+        function toggleMobileNavMenu() {
+            document.getElementById('mobileNavMenu').classList.toggle('hidden');
+        }
+    </script>
+    
+    <!-- Load child scripts conditionally -->
+    {% block scripts %}{% endblock %}
+</body>
+</html>

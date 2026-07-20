@@ -1,0 +1,178 @@
+{% extends "transactions/base.html" %}
+{% load static %}
+
+{% block title %}Income - Pennywise{% endblock %}
+
+{% block content %}
+<!-- Header Bar -->
+<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+    <div>
+        <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">Income</h1>
+        <p class="text-sm text-gray-500 mt-1">Track paychecks, setup recurring pay cycles, and manage earnings.</p>
+    </div>
+    <div class="flex items-center gap-3">
+        <button onclick="openRecurringModal('add')"
+            class="bg-white hover:bg-gray-50 text-gray-700 font-medium px-4 py-2.5 rounded-lg border border-gray-300 shadow-sm transition flex items-center gap-2 text-sm">
+            <span>🔄</span> New Recurring Rule
+        </button>
+        <button onclick="openPaycheckModal('add')"
+            class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-2.5 rounded-lg shadow-sm transition flex items-center gap-2 text-sm">
+            <span>+</span> Log Paycheck
+        </button>
+    </div>
+</div>
+
+<!-- Active Recurring Rules Section -->
+<div class="mb-8">
+    <h2 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Active Recurring Schedules</h2>
+    {% if active_templates %}
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {% for template in active_templates %}
+        <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex justify-between items-start relative hover:border-blue-200 transition">
+            <div>
+                <div class="flex items-center gap-2">
+                    <span class="font-bold text-gray-900 text-base">{{ template.source_name }}</span>
+                    <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-blue-50 text-blue-600 rounded-md">
+                        {{ template.get_frequency_display }}
+                    </span>
+                </div>
+                <div class="mt-2 flex items-baseline gap-1">
+                    <span class="text-xl font-extrabold text-emerald-600">+${{ template.amount }}</span>
+                    <span class="text-xs text-gray-400">/ pay period</span>
+                </div>
+                <p class="text-xs text-gray-400 mt-1">
+                    Started: {{ template.start_date|date:"M j, Y" }}
+                    {% if template.end_date %}
+                    <br>Ends: {{ template.end_date|date:"M j, Y" }}
+                    {% else %}
+                    <br>Ends: <em>Indefinite</em>
+                    {% endif %}
+                </p>
+            </div>
+            
+            <div class="flex items-center gap-1">
+                <!-- Edit Rule Button -->
+                <button onclick="openRecurringModal('edit', {
+                        id: '{{ template.id }}',
+                        source_name: '{{ template.source_name|escapejs }}',
+                        amount: '{{ template.amount }}',
+                        frequency: '{{ template.frequency }}',
+                        start_date: '{{ template.start_date|date:"Y-m-d" }}',
+                        end_date: '{{ template.end_date|date:"Y-m-d"|default:"" }}'
+                    })"
+                    class="text-xs text-blue-600 hover:text-blue-800 font-medium px-2 py-1 rounded bg-blue-50 hover:bg-blue-100 transition">
+                    Edit
+                </button>
+
+                <!-- Delete Rule Button -->
+                <form method="POST" action="{% url 'income' %}" onsubmit="return confirm('Stop auto-generating future paychecks for {{ template.source_name }}? Existing paychecks in your table will remain.');">
+                    {% csrf_token %}
+                    <input type="hidden" name="delete_rule_id" value="{{ template.id }}">
+                    <button type="submit" title="Remove Recurring Rule" class="text-gray-300 hover:text-red-500 transition p-1 text-lg leading-none">
+                        &times;
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-gray-50 border border-dashed border-gray-200 rounded-xl p-4 text-center text-xs text-gray-500">
+        No active recurring rules set up. Click <strong>"New Recurring Rule"</strong> to automate paycheck tracking.
+    </div>
+    {% endif %}
+</div>
+
+<!-- Dynamic Income Table Container -->
+<div id="income-table-container">
+    {% include "transactions/_income_table.html" %}
+</div>
+
+<!-- Auto-Generate / Edit Recurring Schedule Modal -->
+<div id="recurringModal" class="fixed inset-0 bg-gray-900/40 backdrop-blur-sm hidden flex items-center justify-center z-50">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6 relative">
+        <div class="flex justify-between items-center pb-3 border-b border-gray-100 mb-4">
+            <h3 id="recurringModalTitle" class="text-lg font-bold text-gray-800">Auto-Generate Paychecks</h3>
+            <button onclick="closeRecurringModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        </div>
+        <form method="POST" action="{% url 'income' %}">
+            {% csrf_token %}
+            <input type="hidden" name="form_type" value="recurring">
+            <input type="hidden" name="rule_id" id="modal_rule_id">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Income Source / Employer</label>
+                    <input type="text" name="source_name" id="rule_source_name" required placeholder="e.g. Acme Corp" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Paycheck Amount ($)</label>
+                    <input type="number" step="0.01" name="amount" id="rule_amount" required placeholder="0.00" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Frequency</label>
+                    <select name="frequency" id="rule_frequency" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white">
+                        <option value="WEEKLY">Weekly</option>
+                        <option value="BI_WEEKLY" selected>Bi-weekly</option>
+                        <option value="MONTHLY">Monthly</option>
+                    </select>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Start Date</label>
+                        <input type="date" name="start_date" id="rule_start_date" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">End Date (Optional)</label>
+                        <input type="date" name="end_date" id="rule_end_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500 bg-blue-50 p-3 rounded-lg border border-blue-100">
+                    💡 If End Date is left blank, the rule runs indefinitely into the future.
+                </p>
+            </div>
+            <div class="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+                <button type="button" onclick="closeRecurringModal()" class="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition">Cancel</button>
+                <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition">Save Rule</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function openRecurringModal(mode, data = {}) {
+        const modal = document.getElementById('recurringModal');
+        const title = document.getElementById('recurringModalTitle');
+        const ruleId = document.getElementById('modal_rule_id');
+        const sourceInput = document.getElementById('rule_source_name');
+        const amountInput = document.getElementById('rule_amount');
+        const frequencyInput = document.getElementById('rule_frequency');
+        const startDateInput = document.getElementById('rule_start_date');
+        const endDateInput = document.getElementById('rule_end_date');
+
+        if (mode === 'edit') {
+            title.textContent = 'Edit Recurring Rule';
+            ruleId.value = data.id;
+            sourceInput.value = data.source_name;
+            amountInput.value = data.amount;
+            frequencyInput.value = data.frequency;
+            startDateInput.value = data.start_date;
+            endDateInput.value = data.end_date || '';
+        } else {
+            title.textContent = 'New Recurring Rule';
+            ruleId.value = '';
+            sourceInput.value = '';
+            amountInput.value = '';
+            frequencyInput.value = 'BI_WEEKLY';
+            startDateInput.value = new Date().toISOString().split('T')[0];
+            endDateInput.value = '';
+        }
+        modal.classList.remove('hidden');
+    }
+
+    function closeRecurringModal() {
+        document.getElementById('recurringModal').classList.add('hidden');
+    }
+</script>
+{% endblock %}

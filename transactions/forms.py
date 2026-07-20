@@ -1,5 +1,5 @@
 from django import forms
-from .models import Transaction
+from .models import Transaction, PaycheckTransaction, PaycheckTemplate
 
 class TransactionForm(forms.ModelForm):
     class Meta:
@@ -19,3 +19,20 @@ class TransactionForm(forms.ModelForm):
         if notes and len(notes) > 200:
             raise forms.ValidationError("Notes cannot exceed 200 characters.")
         return notes
+    
+class PaycheckTransactionForm(forms.ModelForm):
+    class Meta:
+        model = PaycheckTransaction
+        fields = ['date', 'source_name', 'amount']
+        widgets = {
+            'date': forms.DateInput(attrs={'type': 'date'}),
+        }
+
+class PaycheckTemplateForm(forms.ModelForm):
+    class Meta:
+        model = PaycheckTemplate
+        fields = ['source_name', 'amount', 'frequency', 'start_date', 'end_date']
+        widgets = {
+            'start_date': forms.DateInput(attrs={'type': 'date'}),
+            'end_date': forms.DateInput(attrs={'type': 'date'}),
+        }

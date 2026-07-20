@@ -1,0 +1,139 @@
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-visible">
+    <!-- Top Bar: Title or Bulk Actions -->
+    <div class="p-5 border-b border-gray-100 flex justify-between items-center min-h-[68px]">
+        
+        <!-- Standard Header Title -->
+        <div id="default-header" class="flex justify-between items-center w-full">
+            <h2 class="text-lg font-bold text-gray-800">Income History</h2>
+            {% if current_filters.search or current_filters.start_date or current_filters.end_date or current_filters.min_amount or current_filters.max_amount %}
+            <button hx-get="{% url 'income' %}" hx-target="#income-table-container" hx-push-url="false"
+                class="text-xs font-medium text-gray-500 hover:text-red-600 transition bg-gray-100 px-2.5 py-1 rounded-md">
+                Clear Active Filters ✕
+            </button>
+            {% endif %}
+        </div>
+
+        <!-- Bulk Actions Bar -->
+        <div id="bulk-header" class="hidden flex items-center justify-between w-full">
+            <span class="text-xs font-semibold text-gray-600">
+                <span id="selected-count" class="text-blue-600 font-bold">0</span> items selected
+            </span>
+            <form hx-post="{% url 'income' %}" 
+                  hx-target="#income-table-container" 
+                  id="bulk-delete-form" 
+                  onsubmit="return confirm('Are you sure you want to delete the selected paychecks?');">
+                {% csrf_token %}
+                <input type="hidden" name="action_type" value="bulk_delete">
+                <div id="bulk-ids-container"></div>
+                <button type="submit" 
+                    class="bg-red-50 hover:bg-red-100 text-red-600 font-medium text-xs px-3 py-1.5 rounded-lg border border-red-200 transition cursor-pointer">
+                    🗑️ Delete Selected
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="overflow-x-auto min-h-[350px] w-full">
+        <table class="w-full text-left border-collapse">
+            <thead>
+                <tr class="bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500 uppercase tracking-wider select-none">
+                    <th class="py-3 px-4 w-10">
+                        <input type="checkbox" id="select-all-paychecks" onclick="toggleSelectAll(this)" 
+                            class="rounded border-gray-300 text-blue-600 focus:ring-0 cursor-pointer">
+                    </th>
+                    <th class="py-3 px-4 min-w-[140px]">Date</th>
+                    <th class="py-3 px-4 min-w-[200px]">Source</th>
+                    <th class="py-3 px-4 text-right min-w-[160px]">Amount</th>
+                    <th class="py-3 px-4 text-center min-w-[130px]">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 text-sm">
+                {% for paycheck in paychecks %}
+                <tr class="hover:bg-gray-50/50 transition paycheck-row">
+                    <td class="py-3.5 px-4">
+                        <input type="checkbox" value="{{ paycheck.id }}" onclick="updateSelectionUI()"
+                            class="paycheck-checkbox rounded border-gray-300 text-blue-600 focus:ring-0 cursor-pointer">
+                    </td>
+                    <td class="py-3.5 px-4 text-gray-600">{{ paycheck.date|date:"Y-m-d" }}</td>
+                    <td class="py-3.5 px-4 max-w-xs">
+                        <div class="font-medium text-gray-900">{{ paycheck.source_name }}</div>
+                        {% if paycheck.template %}
+                        <span class="inline-block px-1.5 py-0.5 text-[10px] font-semibold bg-blue-50 text-blue-600 rounded mt-0.5">Auto-generated</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-3.5 px-4 text-right font-semibold text-emerald-600">
+                        +${{ paycheck.amount }}
+                    </td>
+                    <td class="py-3.5 px-4 text-center">
+                        <div class="flex items-center justify-center gap-2">
+                            <button onclick="openPaycheckModal('edit', {
+                                    id: '{{ paycheck.id }}',
+                                    date: '{{ paycheck.date|date:"Y-m-d" }}',
+                                    source_name: '{{ paycheck.source_name|escapejs }}',
+                                    amount: '{{ paycheck.amount }}'
+                                })"
+                                class="text-blue-600 hover:text-blue-800 font-medium text-xs px-2.5 py-1 rounded bg-blue-50 hover:bg-blue-100 transition">
+                                Edit
+                            </button>
+
+                            <!-- HTMX Single Row Delete -->
+                            <form hx-post="{% url 'income' %}" 
+                                  hx-target="#income-table-container" 
+                                  onsubmit="return confirm('Are you sure you want to delete this paycheck?');" 
+                                  class="inline">
+                                {% csrf_token %}
+                                <input type="hidden" name="action_type" value="single_delete">
+                                <input type="hidden" name="delete_id" value="{{ paycheck.id }}">
+                                <button type="submit" 
+                                    class="text-red-600 hover:text-red-800 font-medium text-xs px-2.5 py-1 rounded bg-red-50 hover:bg-red-100 transition">
+                                    Delete
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="py-8 text-center text-gray-400">No income entries match your selection.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    function toggleSelectAll(master) {
+        const checkboxes = document.querySelectorAll('.paycheck-checkbox');
+        checkboxes.forEach(cb => cb.checked = master.checked);
+        updateSelectionUI();
+    }
+
+    function updateSelectionUI() {
+        const checked = document.querySelectorAll('.paycheck-checkbox:checked');
+        const defaultHeader = document.getElementById('default-header');
+        const bulkHeader = document.getElementById('bulk-header');
+        const selectedCount = document.getElementById('selected-count');
+        const idsContainer = document.getElementById('bulk-ids-container');
+
+        if (checked.length > 0) {
+            defaultHeader.classList.add('hidden');
+            bulkHeader.classList.remove('hidden');
+            selectedCount.textContent = checked.length;
+
+            idsContainer.innerHTML = '';
+            checked.forEach(cb => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'paycheck_ids';
+                input.value = cb.value;
+                idsContainer.appendChild(input);
+            });
+        } else {
+            defaultHeader.classList.remove('hidden');
+            bulkHeader.classList.add('hidden');
+            const selectAll = document.getElementById('select-all-paychecks');
+            if (selectAll) selectAll.checked = false;
+        }
+    }
+</script>
