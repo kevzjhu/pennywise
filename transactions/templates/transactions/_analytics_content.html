@@ -1,0 +1,147 @@
+<!-- KPI Cards Row -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+        <p class="text-xs font-semibold uppercase tracking-wider text-gray-500">Total Income</p>
+        <p class="text-2xl font-bold text-gray-900 mt-2">${{ total_income|floatformat:2 }}</p>
+    </div>
+    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+        <p class="text-xs font-semibold uppercase tracking-wider text-gray-500">Total Spend</p>
+        <p class="text-2xl font-bold text-gray-900 mt-2">${{ total_spend|floatformat:2 }}</p>
+    </div>
+    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+        <p class="text-xs font-semibold uppercase tracking-wider text-gray-500">Net Savings</p>
+        <p class="text-2xl font-bold {% if net_savings >= 0 %}text-green-600{% else %}text-red-600{% endif %} mt-2">
+            ${{ net_savings|floatformat:2 }}
+        </p>
+    </div>
+    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+        <p class="text-xs font-semibold uppercase tracking-wider text-gray-500">Savings Rate %</p>
+        <p class="text-2xl font-bold text-blue-600 mt-2">{{ savings_rate|floatformat:2 }}%</p>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Spend by Category -->
+    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between">
+        <h3 class="text-sm font-bold text-gray-700 mb-4">Total Spend by Category</h3>
+        <div class="relative h-64">
+            <canvas id="categoryChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Spend & Income Trend -->
+    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between">
+        <h3 class="text-sm font-bold text-gray-700 mb-4">Total Spend & Total Income by Month</h3>
+        <div class="relative h-64">
+            <canvas id="trendChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Scrollable Transaction Table -->
+    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between">
+        <h3 class="text-sm font-bold text-gray-700 mb-2">Filtered Transactions</h3>
+        <div class="overflow-y-auto max-h-64 border border-gray-100 rounded-lg">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-gray-50 sticky top-0 text-gray-600 font-semibold border-b border-gray-200">
+                    <tr>
+                        <th class="py-2 px-3">Date</th>
+                        <th class="py-2 px-3">Description</th>
+                        <th class="py-2 px-3">Category</th>
+                        <th class="py-2 px-3 text-right">Amount</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    {% for t in transactions %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="py-2 px-3 text-gray-500 whitespace-nowrap">{{ t.date|date:"m/d/Y" }}</td>
+                        <td class="py-2 px-3 font-medium text-gray-800">{{ t.description }}</td>
+                        <td class="py-2 px-3 text-gray-500 capitalize">{{ t.category.name|default:"Uncategorized" }}</td>
+                        <td class="py-2 px-3 text-right font-semibold text-gray-900">${{ t.amount }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-6 text-gray-400">No transactions match active filters.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Safe Execution Scripts for Rendering Chart.js -->
+<script>
+    (function renderCharts() {
+        // Destroy existing Chart instances if reloading via HTMX
+        if (window.categoryChartInstance) window.categoryChartInstance.destroy();
+        if (window.trendChartInstance) window.trendChartInstance.destroy();
+
+        // Data injected safely from Django Context
+        const catLabels = {{ cat_labels|safe }};
+        const catData = {{ cat_data|safe }};
+        const trendLabels = {{ trend_labels|safe }};
+        const trendSpend = {{ trend_spend|safe }};
+        const trendIncome = {{ trend_income|safe }};
+
+        // 1. Category Bar Chart
+        const ctxCat = document.getElementById('categoryChart').getContext('2d');
+        window.categoryChartInstance = new Chart(ctxCat, {
+            type: 'bar',
+            data: {
+                labels: catLabels,
+                datasets: [{
+                    label: 'Total Spend',
+                    data: catData,
+                    backgroundColor: '#3b82f6',
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { callback: v => '$' + v } },
+                    y: { grid: { display: false } }
+                }
+            }
+        });
+
+        // 2. Combo Trend Chart (Bar Spend + Line Income)
+        const ctxTrend = document.getElementById('trendChart').getContext('2d');
+        window.trendChartInstance = new Chart(ctxTrend, {
+            data: {
+                labels: trendLabels,
+                datasets: [
+                    {
+                        type: 'line',
+                        label: 'Total Income',
+                        data: trendIncome,
+                        borderColor: '#1e3a8a',
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        fill: false
+                    },
+                    {
+                        type: 'bar',
+                        label: 'Total Spend',
+                        data: trendSpend,
+                        backgroundColor: '#60a5fa',
+                        borderRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'top', align: 'start' } },
+                scales: {
+                    x: { grid: { display: false } },
+                    y: { grid: { borderDash: [4, 4] }, ticks: { callback: v => '$' + v } }
+                }
+            }
+        });
+    })();
+</script>

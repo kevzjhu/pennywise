@@ -1,6 +1,10 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from .forms import TransactionForm, PaycheckTransactionForm, PaycheckTemplateForm
-from .models import Transaction, PaycheckTransaction, PaycheckTemplate
+from .models import Transaction, PaycheckTransaction, PaycheckTemplate, Category
+from django.db.models import Sum, Q, Value, DecimalField
+from django.db.models.functions import Coalesce, ExtractYear, ExtractMonth
+from decimal import Decimal
+import calendar
 
 def home(request):
     if request.method == "POST":
@@ -265,7 +269,121 @@ def budget(request):
     return render(request, 'transactions/budget.html')
 
 def analytics(request):
-    return render(request, 'transactions/analytics.html')
+    # 1. Multi-Select Filters
+    selected_years = request.GET.getlist('year')
+    selected_months = request.GET.getlist('month')
+    selected_categories = request.GET.getlist('category')  # Category Primary Key IDs as strings
+
+    # Convert month, year, and category ID string values to integers if provided
+    selected_months = [int(m) for m in selected_months if m.isdigit()]
+    selected_years = [int(y) for y in selected_years if y.isdigit()]
+    selected_category_ids = [int(c) for c in selected_categories if c.isdigit()]
+
+    # QuerySets
+    expense_qs = Transaction.objects.all()
+    income_qs = PaycheckTransaction.objects.all()
+
+    # Apply Expense Category Filter (matching Category Foreign Key IDs)
+    if selected_category_ids:
+        expense_qs = expense_qs.filter(category__id__in=selected_category_ids)
+
+    # Apply Year Filters
+    if selected_years:
+        expense_qs = expense_qs.filter(date__year__in=selected_years)
+        income_qs = income_qs.filter(date__year__in=selected_years)
+
+    # Apply Month Filters
+    if selected_months:
+        expense_qs = expense_qs.filter(date__month__in=selected_months)
+        income_qs = income_qs.filter(date__month__in=selected_months)
+
+    # 2. KPI Calculations
+    total_spend = expense_qs.aggregate(
+        total=Coalesce(Sum('amount'), Value(0), output_field=DecimalField())
+    )['total']
+
+    total_income = income_qs.aggregate(
+        total=Coalesce(Sum('amount'), Value(0), output_field=DecimalField())
+    )['total']
+
+    net_savings = total_income - total_spend
+    savings_rate = (net_savings / total_income * 100) if total_income > 0 else 0
+
+    # 3. Graph Data: Total Spend by Category (Horizontal Bar Chart)
+    cat_breakdown = (
+        expense_qs.values('category__name')
+        .annotate(total=Sum('amount'))
+        .order_by('-total')
+    )
+    cat_labels = [c['category__name'] if c['category__name'] else 'Uncategorized' for c in cat_breakdown]
+    cat_data = [float(c['total']) for c in cat_breakdown]
+
+    # 4. Graph Data: Spend vs Income by Month (Combo Bar + Line Chart)
+    monthly_expense = (
+        expense_qs.annotate(year=ExtractYear('date'), month=ExtractMonth('date'))
+        .values('year', 'month')
+        .annotate(total=Sum('amount'))
+    )
+    monthly_income = (
+        income_qs.annotate(year=ExtractYear('date'), month=ExtractMonth('date'))
+        .values('year', 'month')
+        .annotate(total=Sum('amount'))
+    )
+
+    exp_map = {(m['year'], m['month']): float(m['total']) for m in monthly_expense}
+    inc_map = {(m['year'], m['month']): float(m['total']) for m in monthly_income}
+
+    # Collect all unique (year, month) keys present in the filtered set
+    all_keys = sorted(list(set(exp_map.keys()) | set(inc_map.keys())))
+    
+    trend_labels = [f"{calendar.month_abbr[m]} {y}" for y, m in all_keys]
+    trend_spend = [exp_map.get(k, 0.0) for k in all_keys]
+    trend_income = [inc_map.get(k, 0.0) for k in all_keys]
+
+    # 5. Populate Filter Dropdown Options
+    all_years = sorted(list(set(
+        list(Transaction.objects.dates('date', 'year').values_list('date__year', flat=True)) +
+        list(PaycheckTransaction.objects.dates('date', 'year').values_list('date__year', flat=True))
+    )), reverse=True)
+
+    month_choices = [(i, calendar.month_abbr[i]) for i in range(1, 13)]
+    
+    # 💡 Fetch dynamic categories sorted alphabetically from Category table
+    category_options = Category.objects.all()
+
+    # 6. Table List (Filtered Transactions)
+    transactions_list = expense_qs.order_by('-date')
+
+    context = {
+        # KPIs
+        'total_income': total_income,
+        'total_spend': total_spend,
+        'net_savings': net_savings,
+        'savings_rate': savings_rate,
+
+        # Chart JSON arrays
+        'cat_labels': cat_labels,
+        'cat_data': cat_data,
+        'trend_labels': trend_labels,
+        'trend_spend': trend_spend,
+        'trend_income': trend_income,
+
+        # Filter Options & Selections
+        'selected_years': selected_years,
+        'selected_months': selected_months,
+        'selected_categories': selected_category_ids,
+        'available_years': all_years,
+        'month_choices': month_choices,
+        'category_options': category_options,  # 💡 Pass database queryset
+
+        # Table Data
+        'transactions': transactions_list,
+    }
+
+    if request.headers.get('HX-Request'):
+        return render(request, "transactions/_analytics_content.html", context)
+
+    return render(request, "transactions/analytics.html", context)
 
 def settings(request):
     return render(request, 'transactions/settings.html')

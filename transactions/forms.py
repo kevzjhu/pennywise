@@ -1,7 +1,16 @@
 from django import forms
-from .models import Transaction, PaycheckTransaction, PaycheckTemplate
+from .models import Transaction, Category, PaycheckTransaction, PaycheckTemplate
 
 class TransactionForm(forms.ModelForm):
+    category = forms.ModelChoiceField(
+        queryset=Category.objects.all(),  # 🔤 Pulls dynamically from Category table
+        required=False,
+        empty_label="Select Category",
+        widget=forms.Select(attrs={
+            'class': 'w-full text-sm border border-gray-300 rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500'
+        })
+    )
+
     class Meta:
         model = Transaction
         fields = ['date', 'description', 'amount', 'category', 'notes']
