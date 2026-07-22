@@ -15,7 +15,7 @@ class Category(models.Model):
         return self.name
 
 class Transaction(models.Model):
-    date = models.DateField()
+    date = models.DateField(db_index = True)
     description = models.CharField(max_length=255)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     

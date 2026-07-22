@@ -1,27 +1,29 @@
 <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-visible">
-    <!-- Top Bar: Shows Title/Clear Filters OR Bulk Actions when checkboxes are selected -->
+    <!-- Top Bar: Shows Title/Clear Filters OR Bulk Actions -->
     <div class="p-5 border-b border-gray-100 flex justify-between items-center min-h-[68px]">
         
-        <!-- Standard Header Title (Hidden when bulk selecting) -->
+        <!-- Standard Header Title -->
         <div id="default-header" class="flex justify-between items-center w-full">
             <h2 class="text-lg font-bold text-gray-800">Recent Transactions</h2>
             {% if current_filters.search or current_filters.categories or current_filters.start_date or current_filters.end_date or current_filters.min_amount or current_filters.max_amount %}
             <button hx-get="{% url 'home' %}" hx-target="#table-container" hx-push-url="false"
-                class="text-xs font-medium text-gray-500 hover:text-red-600 transition bg-gray-100 px-2.5 py-1 rounded-md">
+                class="text-xs font-medium text-gray-500 hover:text-red-600 transition bg-gray-100 px-2.5 py-1 rounded-md cursor-pointer">
                 Clear Active Filters ✕
             </button>
             {% endif %}
         </div>
 
-        <!-- Bulk Actions Bar (Shown dynamically when at least 1 checkbox is picked) -->
+        <!-- Bulk Actions Bar -->
         <div id="bulk-header" class="hidden flex items-center justify-between w-full">
             <span class="text-xs font-semibold text-gray-600">
                 <span id="selected-count" class="text-blue-600 font-bold">0</span> items selected
             </span>
-            <form hx-post="{% url 'home' %}" hx-target="#table-container" id="bulk-delete-form" onsubmit="return confirm('Are you sure you want to delete the selected transactions?');">
+            <form hx-post="{% url 'home' %}" 
+                hx-target="#table-container" 
+                id="bulk-delete-form" 
+                hx-confirm="Are you sure you want to delete the selected transactions?">
                 {% csrf_token %}
                 <input type="hidden" name="action_type" value="bulk_delete">
-                <!-- Container to hold hidden inputs for selected IDs before form submits -->
                 <div id="bulk-ids-container"></div>
                 <button type="submit" 
                     class="bg-red-50 hover:bg-red-100 text-red-600 font-medium text-xs px-3 py-1.5 rounded-lg border border-red-200 transition cursor-pointer">
@@ -233,12 +235,15 @@
                                 Edit
                             </button>
 
-                            <form hx-post="{% url 'home' %}" hx-target="#table-container" onsubmit="return confirm('Are you sure you want to delete this transaction?');" class="inline">
+                            <form hx-post="{% url 'home' %}" 
+                                hx-target="#table-container" 
+                                hx-confirm="Are you sure you want to delete this transaction?" 
+                                class="inline">
                                 {% csrf_token %}
                                 <input type="hidden" name="action_type" value="single_delete">
                                 <input type="hidden" name="delete_id" value="{{ tx.id }}">
                                 <button type="submit" 
-                                    class="text-red-600 hover:text-red-800 font-medium text-xs px-2.5 py-1 rounded bg-red-50 hover:bg-red-100 transition">
+                                    class="text-red-600 hover:text-red-800 font-medium text-xs px-2.5 py-1 rounded bg-red-50 hover:bg-red-100 transition cursor-pointer">
                                     Delete
                                 </button>
                             </form>
@@ -253,6 +258,45 @@
             </tbody>
         </table>
     </div>
+
+    <!-- 💡 PAGINATION FOOTER CONTROL BAR -->
+    {% if transactions.paginator.num_pages > 1 %}
+    <div class="px-5 py-3 border-t border-gray-100 flex items-center justify-between bg-gray-50/50 rounded-b-xl text-xs text-gray-600 select-none">
+        <div>
+            Showing <span class="font-semibold text-gray-900">{{ transactions.start_index }}</span> to <span class="font-semibold text-gray-900">{{ transactions.end_index }}</span> of <span class="font-semibold text-gray-900">{{ transactions.paginator.count }}</span> items
+        </div>
+
+        <div class="flex items-center gap-1">
+            {% if transactions.has_previous %}
+            <button hx-get="?page={{ transactions.previous_page_number }}&sort_by={{ current_filters.sort_by }}&direction={{ current_filters.direction }}&search={{ current_filters.search }}&start_date={{ current_filters.start_date }}&end_date={{ current_filters.end_date }}&min_amount={{ current_filters.min_amount }}&max_amount={{ current_filters.max_amount }}{% for cat in current_filters.categories %}&category={{ cat }}{% endfor %}"
+                    hx-target="#table-container" hx-push-url="false"
+                    class="px-2.5 py-1 rounded border border-gray-300 bg-white hover:bg-gray-100 text-gray-700 font-medium transition cursor-pointer">
+                ← Previous
+            </button>
+            {% else %}
+            <span class="px-2.5 py-1 rounded border border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed">
+                ← Previous
+            </span>
+            {% endif %}
+
+            <span class="px-3 font-semibold text-gray-700">
+                Page {{ transactions.number }} of {{ transactions.paginator.num_pages }}
+            </span>
+
+            {% if transactions.has_next %}
+            <button hx-get="?page={{ transactions.next_page_number }}&sort_by={{ current_filters.sort_by }}&direction={{ current_filters.direction }}&search={{ current_filters.search }}&start_date={{ current_filters.start_date }}&end_date={{ current_filters.end_date }}&min_amount={{ current_filters.min_amount }}&max_amount={{ current_filters.max_amount }}{% for cat in current_filters.categories %}&category={{ cat }}{% endfor %}"
+                    hx-target="#table-container" hx-push-url="false"
+                    class="px-2.5 py-1 rounded border border-gray-300 bg-white hover:bg-gray-100 text-gray-700 font-medium transition cursor-pointer">
+                Next →
+            </button>
+            {% else %}
+            <span class="px-2.5 py-1 rounded border border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed">
+                Next →
+            </span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
 </div>
 
 <script>

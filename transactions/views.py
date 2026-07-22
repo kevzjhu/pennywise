@@ -1,4 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
+from django.core.paginator import Paginator
 from .forms import TransactionForm, PaycheckTransactionForm, PaycheckTemplateForm
 from .models import Transaction, PaycheckTransaction, PaycheckTemplate, Category
 from django.db.models import Sum, Q, Value, DecimalField
@@ -12,20 +13,20 @@ def home(request):
         delete_id = request.POST.get('delete_id')
         transaction_id = request.POST.get('transaction_id')
 
-        # 1. Handle Bulk Delete
+        # 1. Handle Bulk Delete[cite: 10]
         if action_type == 'bulk_delete' or request.POST.get('bulk_delete'):
             transaction_ids = request.POST.getlist('transaction_ids')
             if transaction_ids:
                 Transaction.objects.filter(id__in=transaction_ids).delete()
 
-        # 2. Handle Single Row Delete
+        # 2. Handle Single Row Delete[cite: 10]
         elif action_type == 'single_delete' or delete_id:
             target_id = delete_id or request.POST.get('delete_id')
             if target_id:
                 transaction = get_object_or_404(Transaction, pk=target_id)
                 transaction.delete()
 
-        # 3. Handle Add / Edit Transaction
+        # 3. Handle Add / Edit Transaction[cite: 10]
         else:
             if transaction_id:
                 instance = get_object_or_404(Transaction, pk=transaction_id)
@@ -36,13 +37,18 @@ def home(request):
             if form.is_valid():
                 form.save()
 
-        # HTMX Check: Return re-rendered partial template if requested via HTMX
+        # HTMX Check: Return re-rendered partial template[cite: 10]
         if request.headers.get('HX-Request'):
             form = TransactionForm()
             transactions = Transaction.objects.all().order_by('-date')
+            
+            # 💡 Paginate POST re-renders (25 items per page)[cite: 10]
+            paginator = Paginator(transactions, 25)
+            page_obj = paginator.get_page(1)
+
             context = {
                 'form': form,
-                'transactions': transactions,
+                'transactions': page_obj,  # Pass page_obj[cite: 10]
                 'current_filters': {
                     'search': '',
                     'categories': [],
@@ -59,16 +65,16 @@ def home(request):
 
         return redirect('home')
             
-    # --- GET REQUEST: ADVANCED FILTERING & SORTING ---
+    # --- GET REQUEST: ADVANCED FILTERING & SORTING ---[cite: 10]
     form = TransactionForm()
     transactions = Transaction.objects.all()
 
-    # 1. Multi-Select Categories
+    # 1. Multi-Select Categories[cite: 10]
     selected_categories = request.GET.getlist('category')
     if selected_categories:
         transactions = transactions.filter(category__in=selected_categories)
 
-    # 2. Date Range
+    # 2. Date Range[cite: 10]
     start_date = request.GET.get('start_date', '')
     end_date = request.GET.get('end_date', '')
     if start_date:
@@ -76,12 +82,12 @@ def home(request):
     if end_date:
         transactions = transactions.filter(date__lte=end_date)
 
-    # 3. Description Search
+    # 3. Description Search[cite: 10]
     search_query = request.GET.get('search', '')
     if search_query:
         transactions = transactions.filter(description__icontains=search_query)
 
-    # 4. Amount Filter (Flexible Range)
+    # 4. Amount Filter[cite: 10]
     min_amount = request.GET.get('min_amount', '')
     max_amount = request.GET.get('max_amount', '')
 
@@ -91,7 +97,7 @@ def home(request):
     if max_amount:
         transactions = transactions.filter(amount__lte=float(max_amount))
 
-    # 5. Sorting
+    # 5. Sorting[cite: 10]
     sort_by = request.GET.get('sort_by', 'date')
     direction = request.GET.get('direction', 'desc')
 
@@ -105,9 +111,14 @@ def home(request):
 
     next_direction = 'asc' if direction == 'desc' else 'desc'
 
+    # 💡 6. Server-Side Pagination (25 items per page)[cite: 10]
+    paginator = Paginator(transactions, 25)
+    page_number = request.GET.get('page', 1)
+    page_obj = paginator.get_page(page_number)
+
     context = {
         'form': form,
-        'transactions': transactions,
+        'transactions': page_obj,  # 💡 Pass page_obj[cite: 10]
         'current_filters': {
             'search': search_query,
             'categories': selected_categories,
@@ -170,11 +181,7 @@ def income(request):
                 template_form = PaycheckTemplateForm(request.POST, instance=instance)
                 if template_form.is_valid():
                     template = template_form.save()
-                    
-                    # 💡 Delete existing rows linked to this template
                     PaycheckTransaction.objects.filter(template=template).delete()
-                    
-                    # 💡 Regenerate historical rows (will now skip dates saved in template.skipped_dates!)
                     template.generate_historical_paychecks()
             else:
                 template_form = PaycheckTemplateForm(request.POST)
@@ -196,9 +203,12 @@ def income(request):
             if form.is_valid():
                 form.save()
 
+        # HTMX Check on POST re-render
         if request.headers.get('HX-Request'):
-            paychecks = PaycheckTransaction.objects.all()
-            return render(request, "transactions/_income_table.html", {'paychecks': paychecks, 'current_filters': {}})
+            paychecks = PaycheckTransaction.objects.all().order_by('-date')
+            paginator = Paginator(paychecks, 25)
+            page_obj = paginator.get_page(1)
+            return render(request, "transactions/_income_table.html", {'paychecks': page_obj, 'current_filters': {}})
 
         return redirect('income')
 
@@ -243,10 +253,15 @@ def income(request):
 
     next_direction = 'asc' if direction == 'desc' else 'desc'
 
+    # 💡 6. Server-Side Pagination (25 paychecks per page)
+    paginator = Paginator(paychecks, 25)
+    page_number = request.GET.get('page', 1)
+    page_obj = paginator.get_page(page_number)
+
     context = {
         'paycheck_form': paycheck_form,
         'template_form': template_form,
-        'paychecks': paychecks,
+        'paychecks': page_obj,  # Pass page_obj
         'active_templates': active_templates,
         'current_filters': {
             'search': search_query,
@@ -272,7 +287,7 @@ def analytics(request):
     # 1. Multi-Select Filters
     selected_years = request.GET.getlist('year')
     selected_months = request.GET.getlist('month')
-    selected_categories = request.GET.getlist('category')  # Category Primary Key IDs as strings
+    selected_categories = request.GET.getlist('category')
 
     # Convert month, year, and category ID string values to integers if provided
     selected_months = [int(m) for m in selected_months if m.isdigit()]
@@ -283,7 +298,7 @@ def analytics(request):
     expense_qs = Transaction.objects.all()
     income_qs = PaycheckTransaction.objects.all()
 
-    # Apply Expense Category Filter (matching Category Foreign Key IDs)
+    # Apply Expense Category Filter
     if selected_category_ids:
         expense_qs = expense_qs.filter(category__id__in=selected_category_ids)
 
@@ -333,7 +348,6 @@ def analytics(request):
     exp_map = {(m['year'], m['month']): float(m['total']) for m in monthly_expense}
     inc_map = {(m['year'], m['month']): float(m['total']) for m in monthly_income}
 
-    # Collect all unique (year, month) keys present in the filtered set
     all_keys = sorted(list(set(exp_map.keys()) | set(inc_map.keys())))
     
     trend_labels = [f"{calendar.month_abbr[m]} {y}" for y, m in all_keys]
@@ -347,12 +361,13 @@ def analytics(request):
     )), reverse=True)
 
     month_choices = [(i, calendar.month_abbr[i]) for i in range(1, 13)]
-    
-    # 💡 Fetch dynamic categories sorted alphabetically from Category table
     category_options = Category.objects.all()
 
-    # 6. Table List (Filtered Transactions)
+    # 6. Table List & Server-Side Pagination (15 items per page for analytics layout)
     transactions_list = expense_qs.order_by('-date')
+    paginator = Paginator(transactions_list, 15)
+    page_number = request.GET.get('page', 1)
+    page_obj = paginator.get_page(page_number)
 
     context = {
         # KPIs
@@ -374,10 +389,10 @@ def analytics(request):
         'selected_categories': selected_category_ids,
         'available_years': all_years,
         'month_choices': month_choices,
-        'category_options': category_options,  # 💡 Pass database queryset
+        'category_options': category_options,
 
-        # Table Data
-        'transactions': transactions_list,
+        # Table Data (Paginated Object)
+        'transactions': page_obj,
     }
 
     if request.headers.get('HX-Request'):
@@ -386,4 +401,33 @@ def analytics(request):
     return render(request, "transactions/analytics.html", context)
 
 def settings(request):
-    return render(request, 'transactions/settings.html')
+    if request.method == "POST":
+        action = request.POST.get('action')
+
+        # 1. Add New Category
+        if action == 'add_category':
+            category_name = request.POST.get('name', '').strip()
+            if category_name:
+                Category.objects.get_or_create(name=category_name)
+
+        # 2. Edit Existing Category
+        elif action == 'edit_category':
+            category_id = request.POST.get('category_id')
+            new_name = request.POST.get('name', '').strip()
+            if category_id and new_name:
+                cat = get_object_or_404(Category, pk=category_id)
+                cat.name = new_name
+                cat.save()
+
+        # 3. Delete Category
+        elif action == 'delete_category':
+            category_id = request.POST.get('category_id')
+            if category_id:
+                cat = get_object_or_404(Category, pk=category_id)
+                cat.delete()  # Foreign key set_null leaves transactions uncategorized
+
+        return redirect('settings')
+
+    # GET Request: Fetch categories (sorted alphabetically by Category Meta ordering)
+    categories = Category.objects.all()
+    return render(request, 'transactions/settings.html', {'categories': categories})
