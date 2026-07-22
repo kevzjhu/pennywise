@@ -4,7 +4,7 @@ from .forms import TransactionForm, PaycheckTransactionForm, PaycheckTemplateFor
 from .models import Transaction, PaycheckTransaction, PaycheckTemplate, Category
 from django.db.models import Sum, Q, Value, DecimalField
 from django.db.models.functions import Coalesce, ExtractYear, ExtractMonth
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import calendar
 
 def home(request):
@@ -280,16 +280,12 @@ def income(request):
 
     return render(request, "transactions/income.html", context)
 
-def budget(request):
-    return render(request, 'transactions/budget.html')
-
 def analytics(request):
     # 1. Multi-Select Filters
     selected_years = request.GET.getlist('year')
     selected_months = request.GET.getlist('month')
     selected_categories = request.GET.getlist('category')
 
-    # Convert month, year, and category ID string values to integers if provided
     selected_months = [int(m) for m in selected_months if m.isdigit()]
     selected_years = [int(y) for y in selected_years if y.isdigit()]
     selected_category_ids = [int(c) for c in selected_categories if c.isdigit()]
@@ -298,16 +294,13 @@ def analytics(request):
     expense_qs = Transaction.objects.all()
     income_qs = PaycheckTransaction.objects.all()
 
-    # Apply Expense Category Filter
     if selected_category_ids:
         expense_qs = expense_qs.filter(category__id__in=selected_category_ids)
 
-    # Apply Year Filters
     if selected_years:
         expense_qs = expense_qs.filter(date__year__in=selected_years)
         income_qs = income_qs.filter(date__year__in=selected_years)
 
-    # Apply Month Filters
     if selected_months:
         expense_qs = expense_qs.filter(date__month__in=selected_months)
         income_qs = income_qs.filter(date__month__in=selected_months)
@@ -324,16 +317,69 @@ def analytics(request):
     net_savings = total_income - total_spend
     savings_rate = (net_savings / total_income * 100) if total_income > 0 else 0
 
-    # 3. Graph Data: Total Spend by Category (Horizontal Bar Chart)
-    cat_breakdown = (
-        expense_qs.values('category__name')
-        .annotate(total=Sum('amount'))
-        .order_by('-total')
-    )
-    cat_labels = [c['category__name'] if c['category__name'] else 'Uncategorized' for c in cat_breakdown]
-    cat_data = [float(c['total']) for c in cat_breakdown]
+    # 💡 3. Category Breakdown & Budget Calculations
+    categories_qs = Category.objects.all()
+    if selected_category_ids:
+        categories_qs = categories_qs.filter(id__in=selected_category_ids)
 
-    # 4. Graph Data: Spend vs Income by Month (Combo Bar + Line Chart)
+    # Calculate multiplier based on selected months/years for budget targets
+    num_months = len(selected_months) if selected_months else 1
+
+    cat_labels = []
+    cat_spend = []
+    cat_budgets = []
+    budget_progress_list = []
+
+    total_budget_sum = Decimal('0.00')
+
+    for cat in categories_qs:
+        # Sum actual spend for this category in the filtered queryset
+        spend = expense_qs.filter(category=cat).aggregate(
+            total=Coalesce(Sum('amount'), Value(0), output_field=DecimalField())
+        )['total']
+        
+        # Monthly budget scaled by selected month count (if multi-selecting months)
+        target_budget = cat.monthly_budget * Decimal(num_months)
+        total_budget_sum += target_budget
+
+        percent_used = float((spend / target_budget * 100)) if target_budget > 0 else (100.0 if spend > 0 else 0.0)
+
+        # Color status coding
+        if percent_used > 100:
+            status_color = 'bg-red-500'
+            text_color = 'text-red-600'
+        elif percent_used >= 80:
+            status_color = 'bg-amber-500'
+            text_color = 'text-amber-600'
+        else:
+            status_color = 'bg-emerald-500'
+            text_color = 'text-emerald-600'
+
+        cat_labels.append(cat.name)
+        cat_spend.append(float(spend))
+        cat_budgets.append(float(target_budget))
+
+        budget_progress_list.append({
+            'name': cat.name,
+            'spend': spend,
+            'budget': target_budget,
+            'percent': min(percent_used, 100),  # Clamped for visual bar width
+            'raw_percent': percent_used,
+            'status_color': status_color,
+            'text_color': text_color,
+        })
+
+    # Add Uncategorized row if applicable
+    uncategorized_spend = expense_qs.filter(category__isnull=True).aggregate(
+        total=Coalesce(Sum('amount'), Value(0), output_field=DecimalField())
+    )['total']
+
+    if uncategorized_spend > 0:
+        cat_labels.append('Uncategorized')
+        cat_spend.append(float(uncategorized_spend))
+        cat_budgets.append(0.0)
+
+    # 4. Graph Data: Spend vs Income by Month
     monthly_expense = (
         expense_qs.annotate(year=ExtractYear('date'), month=ExtractMonth('date'))
         .values('year', 'month')
@@ -349,12 +395,11 @@ def analytics(request):
     inc_map = {(m['year'], m['month']): float(m['total']) for m in monthly_income}
 
     all_keys = sorted(list(set(exp_map.keys()) | set(inc_map.keys())))
-    
     trend_labels = [f"{calendar.month_abbr[m]} {y}" for y, m in all_keys]
     trend_spend = [exp_map.get(k, 0.0) for k in all_keys]
     trend_income = [inc_map.get(k, 0.0) for k in all_keys]
 
-    # 5. Populate Filter Dropdown Options
+    # 5. Populate Filter Dropdowns
     all_years = sorted(list(set(
         list(Transaction.objects.dates('date', 'year').values_list('date__year', flat=True)) +
         list(PaycheckTransaction.objects.dates('date', 'year').values_list('date__year', flat=True))
@@ -363,7 +408,7 @@ def analytics(request):
     month_choices = [(i, calendar.month_abbr[i]) for i in range(1, 13)]
     category_options = Category.objects.all()
 
-    # 6. Table List & Server-Side Pagination (15 items per page for analytics layout)
+    # 6. Table List & Pagination
     transactions_list = expense_qs.order_by('-date')
     paginator = Paginator(transactions_list, 15)
     page_number = request.GET.get('page', 1)
@@ -375,13 +420,18 @@ def analytics(request):
         'total_spend': total_spend,
         'net_savings': net_savings,
         'savings_rate': savings_rate,
+        'total_budget': total_budget_sum,  # 💡 Added total budget KPI
 
         # Chart JSON arrays
         'cat_labels': cat_labels,
-        'cat_data': cat_data,
+        'cat_spend': cat_spend,       # 💡 Actual Spend array
+        'cat_budgets': cat_budgets,   # 💡 Target Budget array
         'trend_labels': trend_labels,
         'trend_spend': trend_spend,
         'trend_income': trend_income,
+
+        # Budget Progress Widget Data
+        'budget_progress_list': budget_progress_list,
 
         # Filter Options & Selections
         'selected_years': selected_years,
@@ -391,7 +441,7 @@ def analytics(request):
         'month_choices': month_choices,
         'category_options': category_options,
 
-        # Table Data (Paginated Object)
+        # Table Data
         'transactions': page_obj,
     }
 
@@ -407,16 +457,31 @@ def settings(request):
         # 1. Add New Category
         if action == 'add_category':
             category_name = request.POST.get('name', '').strip()
+            raw_budget = request.POST.get('monthly_budget', '0.00')
+            try:
+                monthly_budget = Decimal(raw_budget) if raw_budget else Decimal('0.00')
+            except InvalidOperation:
+                monthly_budget = Decimal('0.00')
+
             if category_name:
-                Category.objects.get_or_create(name=category_name)
+                Category.objects.get_or_create(
+                    name=category_name, 
+                    defaults={'monthly_budget': monthly_budget}
+                )
 
         # 2. Edit Existing Category
         elif action == 'edit_category':
             category_id = request.POST.get('category_id')
             new_name = request.POST.get('name', '').strip()
+            raw_budget = request.POST.get('monthly_budget', '0.00')
+
             if category_id and new_name:
                 cat = get_object_or_404(Category, pk=category_id)
                 cat.name = new_name
+                try:
+                    cat.monthly_budget = Decimal(raw_budget) if raw_budget else Decimal('0.00')
+                except InvalidOperation:
+                    pass
                 cat.save()
 
         # 3. Delete Category
@@ -424,10 +489,10 @@ def settings(request):
             category_id = request.POST.get('category_id')
             if category_id:
                 cat = get_object_or_404(Category, pk=category_id)
-                cat.delete()  # Foreign key set_null leaves transactions uncategorized
+                cat.delete()
 
         return redirect('settings')
 
-    # GET Request: Fetch categories (sorted alphabetically by Category Meta ordering)
+    # GET Request: Fetch categories sorted alphabetically
     categories = Category.objects.all()
     return render(request, 'transactions/settings.html', {'categories': categories})

@@ -34,10 +34,6 @@
                        class="px-3 py-2 rounded-lg text-sm font-medium transition {% if request.resolver_match.url_name == 'income' %}bg-blue-50 text-blue-600{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %}">
                         Income
                     </a>
-                    <a href="{% url 'budget' %}" 
-                       class="px-3 py-2 rounded-lg text-sm font-medium transition {% if request.resolver_match.url_name == 'budget' %}bg-blue-50 text-blue-600{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %}">
-                        Budget
-                    </a>
                     <a href="{% url 'analytics' %}" 
                        class="px-3 py-2 rounded-lg text-sm font-medium transition {% if request.resolver_match.url_name == 'analytics' %}bg-blue-50 text-blue-600{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %}">
                         Analytics
@@ -61,7 +57,6 @@
         <div id="mobileNavMenu" class="hidden md:hidden border-t border-gray-100 bg-white px-4 py-2 space-y-1">
             <a href="{% url 'home' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">Transactions</a>
             <a href="{% url 'income' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">Income</a>
-            <a href="{% url 'budget' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">Budgets</a>
             <a href="{% url 'analytics' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">Analytics</a>
             <a href="{% url 'settings' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">Settings</a>
         </div>

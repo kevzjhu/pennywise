@@ -6,6 +6,7 @@ from django.db import models
 # Create your models here.
 class Category(models.Model):
     name = models.CharField(max_length=50, unique=True)
+    monthly_budget = models.DecimalField(max_digits=10, decimal_places=2, default=0.00) # 💡 Added monthly budget field
 
     class Meta:
         verbose_name_plural = "Categories"
@@ -131,7 +132,7 @@ class PaycheckTransaction(models.Model):
     template = models.ForeignKey(PaycheckTemplate, on_delete=models.SET_NULL, null=True, blank=True)
     source_name = models.CharField(max_length=100)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    date = models.DateField()
+    date = models.DateField(db_index=True)
     
     class Meta:
         ordering = ['-date']
