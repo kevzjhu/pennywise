@@ -1,26 +1,26 @@
 from django.db import models
+from django.contrib.auth.models import User 
 from datetime import date
 from dateutil.relativedelta import relativedelta
-from django.db import models
 
-# Create your models here.
 class Category(models.Model):
-    name = models.CharField(max_length=50, unique=True)
-    monthly_budget = models.DecimalField(max_digits=10, decimal_places=2, default=0.00) # 💡 Added monthly budget field
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='categories')
+    name = models.CharField(max_length=50)
+    monthly_budget = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
 
     class Meta:
         verbose_name_plural = "Categories"
         ordering = ['name']
-
+        unique_together = ('user', 'name')
     def __str__(self):
-        return self.name
+        return f"{self.name} ({self.user.username})"
 
 class Transaction(models.Model):
-    date = models.DateField(db_index = True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='transactions')
+    date = models.DateField(db_index=True)
     description = models.CharField(max_length=255)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     
-    # 💡 Foreign Key to Category model (Set to NULL if category is deleted)
     category = models.ForeignKey(
         Category, 
         on_delete=models.SET_NULL, 
@@ -32,7 +32,6 @@ class Transaction(models.Model):
 
     def __str__(self):
         return f"{self.date} - {self.description} - ${self.amount}"
-    
 
 class PaycheckTemplate(models.Model):
     FREQUENCY_CHOICES = [
@@ -40,11 +39,12 @@ class PaycheckTemplate(models.Model):
         ('BI_WEEKLY', 'Bi-Weekly'),
         ('MONTHLY', 'Monthly'),
     ]
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='paycheck_templates')  # 💡 Link to User
     source_name = models.CharField(max_length=100)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     frequency = models.CharField(max_length=20, choices=FREQUENCY_CHOICES)
     start_date = models.DateField()
-    end_date = models.DateField(null=True, blank=True)  # Blank means indefinite
+    end_date = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     skipped_dates = models.JSONField(default=list, blank=True)
 
@@ -62,17 +62,16 @@ class PaycheckTemplate(models.Model):
         else:
             return 0
 
-        # Convert skipped dates to strings for quick lookup
         skipped_set = set(self.skipped_dates or [])
         paychecks_to_create = []
 
         while current_pay_date <= cutoff_date:
             date_str = current_pay_date.strftime('%Y-%m-%d')
             
-            # 💡 ONLY create row if the user hasn't explicitly deleted this date
             if date_str not in skipped_set:
                 paychecks_to_create.append(
                     PaycheckTransaction(
+                        user=self.user,  # 💡 Set user on auto-generated paychecks
                         template=self,
                         source_name=self.source_name,
                         amount=self.amount,
@@ -87,8 +86,6 @@ class PaycheckTemplate(models.Model):
         return len(paychecks_to_create)
 
     def sync_missing_paychecks(self):
-        """Auto-populates missing checks up to today without creating duplicate dates."""
-        # Get set of all dates already generated for this template
         existing_dates = set(
             self.paychecktransaction_set.values_list('date', flat=True)
         )
@@ -112,10 +109,10 @@ class PaycheckTemplate(models.Model):
 
         while current_pay_date <= cutoff_date:
             date_str = current_pay_date.strftime('%Y-%m-%d')
-            # 💡 Skip if a paycheck for this date already exists in the template or was skipped
             if date_str not in ignored_dates:
                 paychecks_to_create.append(
                     PaycheckTransaction(
+                        user=self.user,  # 💡 Set user
                         template=self,
                         source_name=self.source_name,
                         amount=self.amount,
@@ -127,8 +124,8 @@ class PaycheckTemplate(models.Model):
         if paychecks_to_create:
             PaycheckTransaction.objects.bulk_create(paychecks_to_create)
 
-
 class PaycheckTransaction(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='paycheck_transactions')  # 💡 Link to User
     template = models.ForeignKey(PaycheckTemplate, on_delete=models.SET_NULL, null=True, blank=True)
     source_name = models.CharField(max_length=100)
     amount = models.DecimalField(max_digits=10, decimal_places=2)

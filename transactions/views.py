@@ -1,5 +1,9 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.models import User
+from django.contrib.auth import login
 from .forms import TransactionForm, PaycheckTransactionForm, PaycheckTemplateForm
 from .models import Transaction, PaycheckTransaction, PaycheckTemplate, Category
 from django.db.models import Sum, Q, Value, DecimalField
@@ -7,48 +11,51 @@ from django.db.models.functions import Coalesce, ExtractYear, ExtractMonth
 from decimal import Decimal, InvalidOperation
 import calendar
 
+@login_required
 def home(request):
     if request.method == "POST":
         action_type = request.POST.get('action_type')
         delete_id = request.POST.get('delete_id')
         transaction_id = request.POST.get('transaction_id')
 
-        # 1. Handle Bulk Delete[cite: 10]
+        # 1. Handle Bulk Delete
         if action_type == 'bulk_delete' or request.POST.get('bulk_delete'):
             transaction_ids = request.POST.getlist('transaction_ids')
             if transaction_ids:
-                Transaction.objects.filter(id__in=transaction_ids).delete()
+                Transaction.objects.filter(user=request.user, id__in=transaction_ids).delete()
 
-        # 2. Handle Single Row Delete[cite: 10]
+        # 2. Handle Single Row Delete
         elif action_type == 'single_delete' or delete_id:
             target_id = delete_id or request.POST.get('delete_id')
             if target_id:
-                transaction = get_object_or_404(Transaction, pk=target_id)
+                transaction = get_object_or_404(Transaction, pk=target_id, user=request.user)
                 transaction.delete()
 
-        # 3. Handle Add / Edit Transaction[cite: 10]
+        # 3. Handle Add / Edit Transaction
         else:
             if transaction_id:
-                instance = get_object_or_404(Transaction, pk=transaction_id)
+                instance = get_object_or_404(Transaction, pk=transaction_id, user=request.user)
                 form = TransactionForm(request.POST, instance=instance)
             else:
                 form = TransactionForm(request.POST)
 
             if form.is_valid():
-                form.save()
+                transaction = form.save(commit=False)
+                transaction.user = request.user  # 💡 Attach user
+                transaction.save()
 
-        # HTMX Check: Return re-rendered partial template[cite: 10]
+        # HTMX Check
         if request.headers.get('HX-Request'):
             form = TransactionForm()
-            transactions = Transaction.objects.all().order_by('-date')
+            form.fields['category'].queryset = Category.objects.filter(user=request.user)
+            transactions = Transaction.objects.filter(user=request.user).order_by('-date')
             
-            # 💡 Paginate POST re-renders (25 items per page)[cite: 10]
             paginator = Paginator(transactions, 25)
             page_obj = paginator.get_page(1)
 
             context = {
                 'form': form,
-                'transactions': page_obj,  # Pass page_obj[cite: 10]
+                'transactions': page_obj,
                 'current_filters': {
                     'search': '',
                     'categories': [],
@@ -65,16 +72,19 @@ def home(request):
 
         return redirect('home')
             
-    # --- GET REQUEST: ADVANCED FILTERING & SORTING ---[cite: 10]
+    # --- GET REQUEST ---
     form = TransactionForm()
-    transactions = Transaction.objects.all()
+    # Filter category dropdown options to logged-in user
+    form.fields['category'].queryset = Category.objects.filter(user=request.user)
+    
+    transactions = Transaction.objects.filter(user=request.user)
 
-    # 1. Multi-Select Categories[cite: 10]
+    # 1. Multi-Select Categories
     selected_categories = request.GET.getlist('category')
     if selected_categories:
         transactions = transactions.filter(category__in=selected_categories)
 
-    # 2. Date Range[cite: 10]
+    # 2. Date Range
     start_date = request.GET.get('start_date', '')
     end_date = request.GET.get('end_date', '')
     if start_date:
@@ -82,25 +92,22 @@ def home(request):
     if end_date:
         transactions = transactions.filter(date__lte=end_date)
 
-    # 3. Description Search[cite: 10]
+    # 3. Description Search
     search_query = request.GET.get('search', '')
     if search_query:
         transactions = transactions.filter(description__icontains=search_query)
 
-    # 4. Amount Filter[cite: 10]
+    # 4. Amount Filter
     min_amount = request.GET.get('min_amount', '')
     max_amount = request.GET.get('max_amount', '')
-
     if min_amount:
         transactions = transactions.filter(amount__gte=float(min_amount))
-        
     if max_amount:
         transactions = transactions.filter(amount__lte=float(max_amount))
 
-    # 5. Sorting[cite: 10]
+    # 5. Sorting
     sort_by = request.GET.get('sort_by', 'date')
     direction = request.GET.get('direction', 'desc')
-
     allowed_sort = {'date': 'date', 'description': 'description', 'category': 'category', 'amount': 'amount'}
     db_field = allowed_sort.get(sort_by, 'date')
     
@@ -111,14 +118,13 @@ def home(request):
 
     next_direction = 'asc' if direction == 'desc' else 'desc'
 
-    # 💡 6. Server-Side Pagination (25 items per page)[cite: 10]
     paginator = Paginator(transactions, 25)
     page_number = request.GET.get('page', 1)
     page_obj = paginator.get_page(page_number)
 
     context = {
         'form': form,
-        'transactions': page_obj,  # 💡 Pass page_obj[cite: 10]
+        'transactions': page_obj,
         'current_filters': {
             'search': search_query,
             'categories': selected_categories,
@@ -137,6 +143,8 @@ def home(request):
 
     return render(request, "transactions/home.html", context)
 
+
+@login_required
 def income(request):
     if request.method == "POST":
         action_type = request.POST.get('action_type')
@@ -145,7 +153,7 @@ def income(request):
         if action_type == 'single_delete' or request.POST.get('delete_id'):
             delete_id = request.POST.get('delete_id')
             if delete_id:
-                paycheck = get_object_or_404(PaycheckTransaction, pk=delete_id)
+                paycheck = get_object_or_404(PaycheckTransaction, pk=delete_id, user=request.user)
                 if paycheck.template:
                     template = paycheck.template
                     date_str = paycheck.date.strftime('%Y-%m-%d')
@@ -158,7 +166,7 @@ def income(request):
         elif action_type == 'bulk_delete' or request.POST.get('bulk_delete'):
             paycheck_ids = request.POST.getlist('paycheck_ids')
             if paycheck_ids:
-                paychecks = PaycheckTransaction.objects.filter(id__in=paycheck_ids)
+                paychecks = PaycheckTransaction.objects.filter(user=request.user, id__in=paycheck_ids)
                 for paycheck in paychecks:
                     if paycheck.template:
                         template = paycheck.template
@@ -170,23 +178,25 @@ def income(request):
 
         # 3. Delete Recurring Rule Card
         elif request.POST.get('delete_rule_id'):
-            rule = get_object_or_404(PaycheckTemplate, pk=request.POST.get('delete_rule_id'))
+            rule = get_object_or_404(PaycheckTemplate, pk=request.POST.get('delete_rule_id'), user=request.user)
             rule.delete()
 
         # 4. Create or Edit Recurring Rule Template
         elif request.POST.get('form_type') == 'recurring':
             rule_id = request.POST.get('rule_id')
             if rule_id:
-                instance = get_object_or_404(PaycheckTemplate, pk=rule_id)
+                instance = get_object_or_404(PaycheckTemplate, pk=rule_id, user=request.user)
                 template_form = PaycheckTemplateForm(request.POST, instance=instance)
                 if template_form.is_valid():
                     template = template_form.save()
-                    PaycheckTransaction.objects.filter(template=template).delete()
+                    PaycheckTransaction.objects.filter(user=request.user, template=template).delete()
                     template.generate_historical_paychecks()
             else:
                 template_form = PaycheckTemplateForm(request.POST)
                 if template_form.is_valid():
-                    template = template_form.save()
+                    template = template_form.save(commit=False)
+                    template.user = request.user
+                    template.save()
                     template.generate_historical_paychecks()
 
             return redirect('income')
@@ -195,17 +205,18 @@ def income(request):
         else:
             paycheck_id = request.POST.get('paycheck_id')
             if paycheck_id:
-                instance = get_object_or_404(PaycheckTransaction, pk=paycheck_id)
+                instance = get_object_or_404(PaycheckTransaction, pk=paycheck_id, user=request.user)
                 form = PaycheckTransactionForm(request.POST, instance=instance)
             else:
                 form = PaycheckTransactionForm(request.POST)
 
             if form.is_valid():
-                form.save()
+                paycheck = form.save(commit=False)
+                paycheck.user = request.user
+                paycheck.save()
 
-        # HTMX Check on POST re-render
         if request.headers.get('HX-Request'):
-            paychecks = PaycheckTransaction.objects.all().order_by('-date')
+            paychecks = PaycheckTransaction.objects.filter(user=request.user).order_by('-date')
             paginator = Paginator(paychecks, 25)
             page_obj = paginator.get_page(1)
             return render(request, "transactions/_income_table.html", {'paychecks': page_obj, 'current_filters': {}})
@@ -213,13 +224,13 @@ def income(request):
         return redirect('income')
 
     # --- GET REQUEST ---
-    active_templates = PaycheckTemplate.objects.all()
+    active_templates = PaycheckTemplate.objects.filter(user=request.user)
     for template in active_templates:
         template.sync_missing_paychecks()
 
     paycheck_form = PaycheckTransactionForm()
     template_form = PaycheckTemplateForm()
-    paychecks = PaycheckTransaction.objects.all()
+    paychecks = PaycheckTransaction.objects.filter(user=request.user)
 
     # Filters
     start_date = request.GET.get('start_date', '')
@@ -253,7 +264,6 @@ def income(request):
 
     next_direction = 'asc' if direction == 'desc' else 'desc'
 
-    # 💡 6. Server-Side Pagination (25 paychecks per page)
     paginator = Paginator(paychecks, 25)
     page_number = request.GET.get('page', 1)
     page_obj = paginator.get_page(page_number)
@@ -261,7 +271,7 @@ def income(request):
     context = {
         'paycheck_form': paycheck_form,
         'template_form': template_form,
-        'paychecks': page_obj,  # Pass page_obj
+        'paychecks': page_obj,
         'active_templates': active_templates,
         'current_filters': {
             'search': search_query,
@@ -280,8 +290,9 @@ def income(request):
 
     return render(request, "transactions/income.html", context)
 
+
+@login_required
 def analytics(request):
-    # 1. Multi-Select Filters
     selected_years = request.GET.getlist('year')
     selected_months = request.GET.getlist('month')
     selected_categories = request.GET.getlist('category')
@@ -290,9 +301,9 @@ def analytics(request):
     selected_years = [int(y) for y in selected_years if y.isdigit()]
     selected_category_ids = [int(c) for c in selected_categories if c.isdigit()]
 
-    # QuerySets
-    expense_qs = Transaction.objects.all()
-    income_qs = PaycheckTransaction.objects.all()
+    # Scope QuerySets to user
+    expense_qs = Transaction.objects.filter(user=request.user)
+    income_qs = PaycheckTransaction.objects.filter(user=request.user)
 
     if selected_category_ids:
         expense_qs = expense_qs.filter(category__id__in=selected_category_ids)
@@ -305,7 +316,7 @@ def analytics(request):
         expense_qs = expense_qs.filter(date__month__in=selected_months)
         income_qs = income_qs.filter(date__month__in=selected_months)
 
-    # 2. KPI Calculations
+    # KPIs
     total_spend = expense_qs.aggregate(
         total=Coalesce(Sum('amount'), Value(0), output_field=DecimalField())
     )['total']
@@ -317,34 +328,28 @@ def analytics(request):
     net_savings = total_income - total_spend
     savings_rate = (net_savings / total_income * 100) if total_income > 0 else 0
 
-    # 💡 3. Category Breakdown & Budget Calculations
-    categories_qs = Category.objects.all()
+    categories_qs = Category.objects.filter(user=request.user)
     if selected_category_ids:
         categories_qs = categories_qs.filter(id__in=selected_category_ids)
 
-    # Calculate multiplier based on selected months/years for budget targets
     num_months = len(selected_months) if selected_months else 1
 
     cat_labels = []
     cat_spend = []
     cat_budgets = []
     budget_progress_list = []
-
     total_budget_sum = Decimal('0.00')
 
     for cat in categories_qs:
-        # Sum actual spend for this category in the filtered queryset
         spend = expense_qs.filter(category=cat).aggregate(
             total=Coalesce(Sum('amount'), Value(0), output_field=DecimalField())
         )['total']
         
-        # Monthly budget scaled by selected month count (if multi-selecting months)
         target_budget = cat.monthly_budget * Decimal(num_months)
         total_budget_sum += target_budget
 
         percent_used = float((spend / target_budget * 100)) if target_budget > 0 else (100.0 if spend > 0 else 0.0)
 
-        # Color status coding
         if percent_used > 100:
             status_color = 'bg-red-500'
             text_color = 'text-red-600'
@@ -363,13 +368,12 @@ def analytics(request):
             'name': cat.name,
             'spend': spend,
             'budget': target_budget,
-            'percent': min(percent_used, 100),  # Clamped for visual bar width
+            'percent': min(percent_used, 100),
             'raw_percent': percent_used,
             'status_color': status_color,
             'text_color': text_color,
         })
 
-    # Add Uncategorized row if applicable
     uncategorized_spend = expense_qs.filter(category__isnull=True).aggregate(
         total=Coalesce(Sum('amount'), Value(0), output_field=DecimalField())
     )['total']
@@ -379,7 +383,7 @@ def analytics(request):
         cat_spend.append(float(uncategorized_spend))
         cat_budgets.append(0.0)
 
-    # 4. Graph Data: Spend vs Income by Month
+    # Monthly Trends
     monthly_expense = (
         expense_qs.annotate(year=ExtractYear('date'), month=ExtractMonth('date'))
         .values('year', 'month')
@@ -399,49 +403,39 @@ def analytics(request):
     trend_spend = [exp_map.get(k, 0.0) for k in all_keys]
     trend_income = [inc_map.get(k, 0.0) for k in all_keys]
 
-    # 5. Populate Filter Dropdowns
+    # Filter Dropdowns
     all_years = sorted(list(set(
-        list(Transaction.objects.dates('date', 'year').values_list('date__year', flat=True)) +
-        list(PaycheckTransaction.objects.dates('date', 'year').values_list('date__year', flat=True))
+        list(Transaction.objects.filter(user=request.user).dates('date', 'year').values_list('date__year', flat=True)) +
+        list(PaycheckTransaction.objects.filter(user=request.user).dates('date', 'year').values_list('date__year', flat=True))
     )), reverse=True)
 
     month_choices = [(i, calendar.month_abbr[i]) for i in range(1, 13)]
-    category_options = Category.objects.all()
+    category_options = Category.objects.filter(user=request.user)
 
-    # 6. Table List & Pagination
     transactions_list = expense_qs.order_by('-date')
     paginator = Paginator(transactions_list, 15)
     page_number = request.GET.get('page', 1)
     page_obj = paginator.get_page(page_number)
 
     context = {
-        # KPIs
         'total_income': total_income,
         'total_spend': total_spend,
         'net_savings': net_savings,
         'savings_rate': savings_rate,
-        'total_budget': total_budget_sum,  # 💡 Added total budget KPI
-
-        # Chart JSON arrays
+        'total_budget': total_budget_sum,
         'cat_labels': cat_labels,
-        'cat_spend': cat_spend,       # 💡 Actual Spend array
-        'cat_budgets': cat_budgets,   # 💡 Target Budget array
+        'cat_spend': cat_spend,
+        'cat_budgets': cat_budgets,
         'trend_labels': trend_labels,
         'trend_spend': trend_spend,
         'trend_income': trend_income,
-
-        # Budget Progress Widget Data
         'budget_progress_list': budget_progress_list,
-
-        # Filter Options & Selections
         'selected_years': selected_years,
         'selected_months': selected_months,
         'selected_categories': selected_category_ids,
         'available_years': all_years,
         'month_choices': month_choices,
         'category_options': category_options,
-
-        # Table Data
         'transactions': page_obj,
     }
 
@@ -450,6 +444,8 @@ def analytics(request):
 
     return render(request, "transactions/analytics.html", context)
 
+
+@login_required
 def settings(request):
     if request.method == "POST":
         action = request.POST.get('action')
@@ -465,6 +461,7 @@ def settings(request):
 
             if category_name:
                 Category.objects.get_or_create(
+                    user=request.user, 
                     name=category_name, 
                     defaults={'monthly_budget': monthly_budget}
                 )
@@ -476,7 +473,7 @@ def settings(request):
             raw_budget = request.POST.get('monthly_budget', '0.00')
 
             if category_id and new_name:
-                cat = get_object_or_404(Category, pk=category_id)
+                cat = get_object_or_404(Category, pk=category_id, user=request.user)
                 cat.name = new_name
                 try:
                     cat.monthly_budget = Decimal(raw_budget) if raw_budget else Decimal('0.00')
@@ -488,11 +485,76 @@ def settings(request):
         elif action == 'delete_category':
             category_id = request.POST.get('category_id')
             if category_id:
-                cat = get_object_or_404(Category, pk=category_id)
+                cat = get_object_or_404(Category, pk=category_id, user=request.user)
                 cat.delete()
 
         return redirect('settings')
 
-    # GET Request: Fetch categories sorted alphabetically
-    categories = Category.objects.all()
+    categories = Category.objects.filter(user=request.user)
     return render(request, 'transactions/settings.html', {'categories': categories})
+
+def signup(request):
+    if request.method == "POST":
+        form = UserCreationForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            
+            # Default starter categories with monthly targets
+            default_categories = [
+                {'name': 'Groceries', 'monthly_budget': Decimal('500.00')},
+                {'name': 'Home / Rent', 'monthly_budget': Decimal('1200.00')},
+                {'name': 'Utilities', 'monthly_budget': Decimal('150.00')},
+                {'name': 'Entertainment', 'monthly_budget': Decimal('100.00')},
+                {'name': 'Health & Fitness', 'monthly_budget': Decimal('80.00')},
+                {'name': 'Clothes', 'monthly_budget': Decimal('100.00')},
+                {'name': 'General', 'monthly_budget': Decimal('200.00')},
+            ]
+
+            # Bulk create default categories for the new user
+            Category.objects.bulk_create([
+                Category(user=user, name=cat['name'], monthly_budget=cat['monthly_budget'])
+                for cat in default_categories
+            ])
+            
+            login(request, user)
+            return redirect('home')
+    else:
+        form = UserCreationForm()
+    return render(request, 'registration/signup.html', {'form': form})
+
+def demo_login(request):
+    # 1. Get or create the demo user account
+    demo_user, created = User.objects.get_or_create(
+        username='demo_user',
+        defaults={'email': 'demo@pennywise.app'}
+    )
+    
+    if created:
+        demo_user.set_unusable_password()  # No password needed
+        demo_user.save()
+
+    # 2. Seed initial demo data if the user was just created
+    if created or not Category.objects.filter(user=demo_user).exists():
+        groceries = Category.objects.create(user=demo_user, name="Groceries", monthly_budget=Decimal("600.00"))
+        dining = Category.objects.create(user=demo_user, name="Dining Out", monthly_budget=Decimal("250.00"))
+        rent = Category.objects.create(user=demo_user, name="Housing & Rent", monthly_budget=Decimal("1400.00"))
+        utilities = Category.objects.create(user=demo_user, name="Utilities", monthly_budget=Decimal("150.00"))
+
+        # Create sample transactions
+        Transaction.objects.create(user=demo_user, date="2026-07-01", description="Monthly Rent Payment", amount=Decimal("1400.00"), category=rent)
+        Transaction.objects.create(user=demo_user, date="2026-07-05", description="Supermarket Groceries", amount=Decimal("142.50"), category=groceries)
+        Transaction.objects.create(user=demo_user, date="2026-07-10", description="Dinner with Friends", amount=Decimal("68.20"), category=dining)
+        Transaction.objects.create(user=demo_user, date="2026-07-15", description="Hydro & Electricity Bill", amount=Decimal("94.10"), category=utilities)
+
+        # Create sample paycheck template & income
+        PaycheckTemplate.objects.create(
+            user=demo_user,
+            source_name="Bi-Weekly Salary",
+            amount=Decimal("2250.00"),
+            frequency="BI_WEEKLY",
+            start_date="2026-06-01"
+        )
+
+    # 3. Log the visitor in as demo_user and redirect to Analytics / Home
+    login(request, demo_user)
+    return redirect('analytics')

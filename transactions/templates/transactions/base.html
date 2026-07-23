@@ -23,9 +23,9 @@
                     <span class="text-xl font-black text-blue-600 tracking-tight">Pennywise</span>
                 </div>
 
-                <!-- Navigation Links Links -->
-                <!-- TIP: request.resolver_match.url_name checks your active Django route to highlight the tab blue! -->
+                <!-- Navigation Links & User Authentication Status -->
                 <div class="hidden md:flex space-x-1 h-full items-center">
+                    {% if user.is_authenticated %}
                     <a href="{% url 'home' %}" 
                        class="px-3 py-2 rounded-lg text-sm font-medium transition {% if request.resolver_match.url_name == 'home' %}bg-blue-50 text-blue-600{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %}">
                         Transactions
@@ -42,9 +42,33 @@
                        class="px-3 py-2 rounded-lg text-sm font-medium transition {% if request.resolver_match.url_name == 'settings' %}bg-blue-50 text-blue-600{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %}">
                         Settings
                     </a>
+
+                    <!-- User Account Badge & Logout Form -->
+                    <div class="flex items-center gap-3 pl-4 ml-2 border-l border-gray-200">
+                        <span class="text-xs font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">
+                            👤 {{ user.username }}
+                        </span>
+                        <form method="POST" action="{% url 'logout' %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" 
+                                    class="text-xs text-red-600 hover:text-red-800 font-semibold px-2 py-1 rounded hover:bg-red-50 transition cursor-pointer">
+                                Logout
+                            </button>
+                        </form>
+                    </div>
+                    {% else %}
+                    <a href="{% url 'login' %}" 
+                       class="px-3 py-2 rounded-lg text-sm font-medium text-blue-600 hover:bg-blue-50 transition">
+                        Log In
+                    </a>
+                    <a href="{% url 'signup' %}" 
+                       class="px-3 py-2 rounded-lg text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white transition">
+                        Sign Up
+                    </a>
+                    {% endif %}
                 </div>
 
-                <!-- Simple Mobile Menu Toggle Action (Optional button wrapper layout) -->
+                <!-- Simple Mobile Menu Toggle Action -->
                 <div class="md:hidden">
                     <button onclick="toggleMobileNavMenu()" class="text-gray-500 hover:text-gray-700 p-2 focus:outline-none">
                         ☰
@@ -54,11 +78,25 @@
         </div>
 
         <!-- Collapsible Dropdown Nav for Mobile Layout Panels -->
-        <div id="mobileNavMenu" class="hidden md:hidden border-t border-gray-100 bg-white px-4 py-2 space-y-1">
+        <div id="mobileNavMenu" class="hidden md:hidden border-t border-gray-100 bg-white px-4 py-3 space-y-1">
+            {% if user.is_authenticated %}
+            <div class="px-3 py-1.5 mb-2 text-xs font-semibold text-gray-500 bg-gray-50 rounded-md">
+                Signed in as: <strong class="text-gray-800">{{ user.username }}</strong>
+            </div>
             <a href="{% url 'home' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">Transactions</a>
             <a href="{% url 'income' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">Income</a>
             <a href="{% url 'analytics' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">Analytics</a>
             <a href="{% url 'settings' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">Settings</a>
+            <form method="POST" action="{% url 'logout' %}" class="pt-2 border-t border-gray-100">
+                {% csrf_token %}
+                <button type="submit" class="w-full text-left px-3 py-2 text-base font-semibold text-red-600 hover:bg-red-50 rounded-md">
+                    Logout
+                </button>
+            </form>
+            {% else %}
+            <a href="{% url 'login' %}" class="block px-3 py-2 rounded-md text-base font-medium text-blue-600 hover:bg-blue-50">Log In</a>
+            <a href="{% url 'signup' %}" class="block px-3 py-2 rounded-md text-base font-medium text-blue-600 hover:bg-blue-50">Sign Up</a>
+            {% endif %}
         </div>
     </nav>
 
