@@ -13,7 +13,7 @@ class Category(models.Model):
         ordering = ['name']
         unique_together = ('user', 'name')
     def __str__(self):
-        return f"{self.name} ({self.user.username})"
+        return f"{self.name}"
 
 class Transaction(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='transactions')

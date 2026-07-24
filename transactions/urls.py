@@ -10,5 +10,4 @@ urlpatterns = [
     # 💡 Auth Routes
     path('accounts/', include('django.contrib.auth.urls')), 
     path('accounts/signup/', views.signup, name='signup'),
-    path('demo/', views.demo_login, name='demo_login'),
 ]
