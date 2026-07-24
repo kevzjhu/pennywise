@@ -8,8 +8,13 @@ from .forms import TransactionForm, PaycheckTransactionForm, PaycheckTemplateFor
 from .models import Transaction, PaycheckTransaction, PaycheckTemplate, Category
 from django.db.models import Sum, Q, Value, DecimalField
 from django.db.models.functions import Coalesce, ExtractYear, ExtractMonth
+from django.utils import timezone
 from decimal import Decimal, InvalidOperation
+import datetime
+from faker import Faker
+import random
 import calendar
+
 
 @login_required
 def home(request):
@@ -530,31 +535,81 @@ def demo_login(request):
     )
     
     if created:
-        demo_user.set_unusable_password()  # No password needed
+        demo_user.set_unusable_password()
         demo_user.save()
 
-    # 2. Seed initial demo data if the user was just created
-    if created or not Category.objects.filter(user=demo_user).exists():
-        groceries = Category.objects.create(user=demo_user, name="Groceries", monthly_budget=Decimal("600.00"))
-        dining = Category.objects.create(user=demo_user, name="Dining Out", monthly_budget=Decimal("250.00"))
-        rent = Category.objects.create(user=demo_user, name="Housing & Rent", monthly_budget=Decimal("1400.00"))
-        utilities = Category.objects.create(user=demo_user, name="Utilities", monthly_budget=Decimal("150.00"))
+    # 💡 2. CLEAR ALL PREVIOUS DEMO DATA on every login
+    # Deleting categories CASCADE deletes associated transactions,
+    # but explicitly clearing ensures a completely fresh state.
+    Category.objects.filter(user=demo_user).delete()
+    Transaction.objects.filter(user=demo_user).delete()
+    PaycheckTemplate.objects.filter(user=demo_user).delete()
+    PaycheckTransaction.objects.filter(user=demo_user).delete()
 
-        # Create sample transactions
-        Transaction.objects.create(user=demo_user, date="2026-07-01", description="Monthly Rent Payment", amount=Decimal("1400.00"), category=rent)
-        Transaction.objects.create(user=demo_user, date="2026-07-05", description="Supermarket Groceries", amount=Decimal("142.50"), category=groceries)
-        Transaction.objects.create(user=demo_user, date="2026-07-10", description="Dinner with Friends", amount=Decimal("68.20"), category=dining)
-        Transaction.objects.create(user=demo_user, date="2026-07-15", description="Hydro & Electricity Bill", amount=Decimal("94.10"), category=utilities)
+    # 3. SEED FRESH FAKE DATA
+    groceries = Category.objects.create(user=demo_user, name="Groceries", monthly_budget=Decimal("600.00"))
+    dining = Category.objects.create(user=demo_user, name="Dining Out", monthly_budget=Decimal("250.00"))
+    rent = Category.objects.create(user=demo_user, name="Housing & Rent", monthly_budget=Decimal("1400.00"))
+    utilities = Category.objects.create(user=demo_user, name="Utilities", monthly_budget=Decimal("150.00"))
 
-        # Create sample paycheck template & income
-        PaycheckTemplate.objects.create(
-            user=demo_user,
-            source_name="Bi-Weekly Salary",
-            amount=Decimal("2250.00"),
-            frequency="BI_WEEKLY",
-            start_date="2026-06-01"
+    now = timezone.now().date()
+    current_year = now.year
+    current_month = now.month
+    fake = Faker()
+
+    # Rent Payment (1st of current month)
+    random_amount = round(random.uniform(1000, 3000), 0)
+    Transaction.objects.create(
+        user=demo_user, 
+        date=f"{current_year}-{current_month:02d}-01", 
+        description="Monthly Rent Payment", 
+        amount=random_amount, 
+        category=rent
+    )
+
+    # Utilities Bill (1st of the current month)
+    random_amount = round(random.uniform(80.0, 200.0), 2)
+    Transaction.objects.create(
+        user=demo_user, 
+        date=f"{current_year}-{current_month:02d}-01", 
+        description="Hydro & Electricity Bill", 
+        amount=random_amount, 
+        category=utilities
+    )
+
+    # Random Expenses across the last 30 days
+    for _ in range(random.randint(6, 10)):
+        fake_date = fake.date_between(start_date="-30d", end_date="today")
+        random_amount = round(random.uniform(8.0, 150.0), 2)
+        random_category = random.choice([groceries, dining])
+        
+        category_description = {
+            groceries: f"Supermarket: {fake.company()}",
+            dining: f"Dinner at {fake.first_name()}'s Bistro"
+        }
+        
+        Transaction.objects.create(
+            user=demo_user, 
+            date=fake_date, 
+            description=category_description[random_category], 
+            amount=random_amount, 
+            category=random_category
         )
 
-    # 3. Log the visitor in as demo_user and redirect to Analytics / Home
+    # 4. Create Paycheck Template & Generate Historical Paychecks
+    two_months_ago = now.replace(day=1) - datetime.timedelta(days=45)
+    random_amount = round(random.uniform(1000, 3000), 0)
+    paycheck_template = PaycheckTemplate.objects.create(
+        user=demo_user,
+        source_name=fake.company(),
+        amount=random_amount,
+        frequency="BI_WEEKLY",
+        start_date=two_months_ago
+    )
+    
+    # 💡 Trigger historical paycheck creation so the Income table is pre-populated
+    paycheck_template.generate_historical_paychecks()
+
+    # 5. Log in & Redirect
     login(request, demo_user)
     return redirect('analytics')
