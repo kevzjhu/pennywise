@@ -8,18 +8,26 @@
 
 > **Pennywise** is a full-stack personal finance application engineered to track transactions, automate recurring income pipelines, manage category budgets, and deliver dynamic BI reporting via real-time analytics dashboards.
 
+![Pennywise Dashboard Preview](assets/Analytics_1.png)
 ---
 
 ## 📌 Features & Highlights
-
-* **📊 Dynamic Analytics & BI Dashboard:**
-  * Interactive Chart.js visualizations for category budget allocation, monthly spend vs. income trends, and net savings rate.
-  * Real-time progress indicators with status color thresholds (Emerald / Amber / Red) for monthly budget variance tracking.
+* **🔍 Transaction Filtering:**
+  * Server-side pagination (25 items/page), multi-category filtering, date ranges, amount bounds, and dynamic column sorting using **HTMX** for fast SPA-like partial page updates without full reloads.
+  ![Pennywise Transactions](assets/Transactions.png)
 * **💸 Automated Recurring Income Sync:**
   * Engine that projects historical and upcoming paychecks across configurable frequencies (Weekly, Bi-Weekly, Monthly).
   * Auto-populates missing income records while handling manual skips or custom paycheck overrides.
-* **🔍 Transaction Filtering:**
-  * Server-side pagination (25 items/page), multi-category filtering, date ranges, amount bounds, and dynamic column sorting using **HTMX** for fast SPA-like partial page updates without full reloads.
+  ![Pennywise Income](assets/Income.png)
+* **📊 Dynamic Analytics & BI Dashboard:**
+  * Interactive Chart.js visualizations for category budget allocation, monthly spend vs. income trends, and net savings rate.
+  * Real-time progress indicators with status color thresholds (Emerald / Amber / Red) for monthly budget variance tracking.
+  ![Pennywise Analytics](assets/Analytics_1.png)
+  ![Pennywise Analytics](assets/Analytics_2.png)
+* **⚙️ Settings and Configuration:**
+  * Configure the spending categories you care about and the allocated monthly budget
+  ![Pennywise Settings](assets/Settings.png)
+
 
 ---
 
@@ -42,7 +50,7 @@
 
 ---
 
-## ⚙️ Local Development Setup
+## 🖥️ Local Development Setup
 
 ### 1. Prerequisites
 Ensure you have **Python 3.10+** and **Git** installed on your machine.
