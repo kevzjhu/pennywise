@@ -1,5 +1,10 @@
 from django import forms
-from .models import Transaction, Category, PaycheckTransaction, PaycheckTemplate
+from .models import Transaction, Category, PaycheckTransaction, PaycheckTemplate, RecurringTransactionTemplate
+
+class RecurringTransactionTemplateForm(forms.ModelForm):
+    class Meta:
+        model = RecurringTransactionTemplate
+        fields = ['description', 'amount', 'category', 'frequency', 'start_date', 'end_date']
 
 class TransactionForm(forms.ModelForm):
     category = forms.ModelChoiceField(

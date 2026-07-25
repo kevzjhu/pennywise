@@ -5,15 +5,90 @@
 
 {% block content %}
 <!-- Header Bar -->
-<div class="flex justify-between items-center mb-8">
+<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
     <div>
         <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">Transactions</h1>
-        <p class="text-sm text-gray-500 mt-1">Manage your cash outflows and track expense items.</p>
+        <p class="text-sm text-gray-500 mt-1">Manage cash outflows, set up recurring expenses, and track items.</p>
     </div>
-    <button onclick="openModal('add')"
-        class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-2.5 rounded-lg shadow-sm transition flex items-center gap-2">
-        <span>+</span> Add Transaction
-    </button>
+    <div class="flex items-center gap-3">
+        <button onclick="openRecurringModal('add')"
+            class="bg-white hover:bg-gray-50 text-gray-700 font-medium px-4 py-2.5 rounded-lg border border-gray-300 shadow-sm transition flex items-center gap-2 text-sm cursor-pointer">
+            <span>🔄</span> New Recurring Rule
+        </button>
+        <button onclick="openModal('add')"
+            class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-2.5 rounded-lg shadow-sm transition flex items-center gap-2 text-sm cursor-pointer">
+            <span>+</span> Log Transaction
+        </button>
+    </div>
+</div>
+
+<!-- Active Recurring Expense Rules Section -->
+<div class="mb-8">
+    <h2 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Active Recurring Expenses</h2>
+    {% if active_templates %}
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {% for template in active_templates %}
+        <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex justify-between items-start relative hover:border-blue-200 transition">
+            <div>
+                <div class="flex items-center gap-2">
+                    <span class="font-bold text-gray-900 text-base">{{ template.description }}</span>
+                    <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-blue-50 text-blue-600 rounded-md">
+                        {{ template.get_frequency_display }}
+                    </span>
+                </div>
+                <div class="mt-1">
+                    {% if template.category %}
+                    <span class="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                        {{ template.category.name }}
+                    </span>
+                    {% endif %}
+                </div>
+                <div class="mt-2 flex items-baseline gap-1">
+                    <span class="text-xl font-extrabold text-red-600">-${{ template.amount }}</span>
+                    <span class="text-xs text-gray-400">/ cycle</span>
+                </div>
+                <p class="text-xs text-gray-400 mt-1">
+                    Started: {{ template.start_date|date:"M j, Y" }}
+                    {% if template.end_date %}
+                    <br>Ends: {{ template.end_date|date:"M j, Y" }}
+                    {% else %}
+                    <br>Ends: <em>Indefinite</em>
+                    {% endif %}
+                </p>
+            </div>
+            
+            <div class="flex items-center gap-1">
+                <!-- Edit Rule Button -->
+                <button onclick="openRecurringModal('edit', {
+                        id: '{{ template.id }}',
+                        description: '{{ template.description|escapejs }}',
+                        amount: '{{ template.amount }}',
+                        category: '{{ template.category.id|default:"" }}',
+                        frequency: '{{ template.frequency }}',
+                        start_date: '{{ template.start_date|date:"Y-m-d" }}',
+                        end_date: '{{ template.end_date|date:"Y-m-d"|default:"" }}'
+                    })"
+                    class="text-xs text-blue-600 hover:text-blue-800 font-medium px-2 py-1 rounded bg-blue-50 hover:bg-blue-100 transition cursor-pointer">
+                    Edit
+                </button>
+
+                <!-- Delete Rule Button -->
+                <form method="POST" action="{% url 'home' %}" onsubmit="return confirm('Stop auto-generating future transactions for {{ template.description }}? Existing transactions will remain.');">
+                    {% csrf_token %}
+                    <input type="hidden" name="delete_rule_id" value="{{ template.id }}">
+                    <button type="submit" title="Remove Recurring Rule" class="text-gray-300 hover:text-red-500 transition p-1 text-lg leading-none cursor-pointer">
+                        &times;
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-gray-50 border border-dashed border-gray-200 rounded-xl p-4 text-center text-xs text-gray-500">
+        No active recurring expense rules set up. Click <strong>"New Recurring Rule"</strong> to automate subscriptions/bills.
+    </div>
+    {% endif %}
 </div>
 
 <!-- Dynamic Table Container (HTMX Target) -->
@@ -21,7 +96,7 @@
     {% include "transactions/_table.html" %}
 </div>
 
-<!-- Transaction Modal Component Container Layout -->
+<!-- Log/Edit Transaction Modal -->
 <div id="transactionModal" class="fixed inset-0 bg-gray-900/40 backdrop-blur-sm hidden flex items-center justify-center z-50">
     <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6 relative">
         <div class="flex justify-between items-center pb-3 border-b border-gray-100 mb-4">
@@ -34,20 +109,20 @@
             <div class="space-y-4">
                 <div>
                     <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Date</label>
-                    <input type="date" name="date" id="id_date" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                    <input type="date" name="date" id="id_date" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
                 </div>
                 <div>
                     <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Description</label>
-                    <input type="text" name="description" id="id_description" required placeholder="e.g. Groceries" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                    <input type="text" name="description" id="id_description" required placeholder="e.g. Groceries" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
                 </div>
                 <div class="grid grid-cols-2 gap-4">
                     <div>
                         <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Amount ($)</label>
-                        <input type="number" step="0.01" name="amount" id="id_amount" required placeholder="0.00" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                        <input type="number" step="0.01" name="amount" id="id_amount" required placeholder="0.00" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
                     </div>
                     <div>
                         <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Category</label>
-                        <select name="category" id="id_category" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white">
+                        <select name="category" id="id_category" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
                             {% for value, label in form.fields.category.choices %}
                             <option value="{{ value }}">{{ label }}</option>
                             {% endfor %}
@@ -55,16 +130,70 @@
                     </div>
                 </div>
                 <div>
-                    <div class="flex justify-between items-center mb-1">
-                        <label class="block text-xs font-semibold text-gray-500 uppercase">Notes (Optional)</label>
-                        <span id="charCount" class="text-xs text-gray-400 font-medium">0/200</span>
-                    </div>
-                    <textarea name="notes" id="id_notes" rows="3" maxlength="200" oninput="updateCharCount()" placeholder="Enter transaction notes..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"></textarea>
+                    <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Notes (Optional)</label>
+                    <textarea name="notes" id="id_notes" rows="3" maxlength="200" placeholder="Enter transaction notes..." class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"></textarea>
                 </div>
             </div>
             <div class="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
-                <button type="button" onclick="closeModal()" class="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition">Cancel</button>
-                <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition">Save Transaction</button>
+                <button type="button" onclick="closeModal()" class="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
+                <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm">Save Transaction</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Recurring Expense Schedule Modal -->
+<div id="recurringModal" class="fixed inset-0 bg-gray-900/40 backdrop-blur-sm hidden flex items-center justify-center z-50">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6 relative">
+        <div class="flex justify-between items-center pb-3 border-b border-gray-100 mb-4">
+            <h3 id="recurringModalTitle" class="text-lg font-bold text-gray-800">Auto-Generate Expense</h3>
+            <button onclick="closeRecurringModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        </div>
+        <form method="POST" action="{% url 'home' %}">
+            {% csrf_token %}
+            <input type="hidden" name="form_type" value="recurring">
+            <input type="hidden" name="rule_id" id="modal_rule_id">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Description / Bill Name</label>
+                    <input type="text" name="description" id="rule_description" required placeholder="e.g. Netflix Subscription" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Amount ($)</label>
+                        <input type="number" step="0.01" name="amount" id="rule_amount" required placeholder="0.00" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Category</label>
+                        <select name="category" id="rule_category" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                            {% for value, label in recurring_form.fields.category.choices %}
+                            <option value="{{ value }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Frequency</label>
+                    <select name="frequency" id="rule_frequency" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                        <option value="WEEKLY">Weekly</option>
+                        <option value="BI_WEEKLY">Bi-weekly</option>
+                        <option value="MONTHLY" selected>Monthly</option>
+                    </select>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Start Date</label>
+                        <input type="date" name="start_date" id="rule_start_date" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">End Date (Optional)</label>
+                        <input type="date" name="end_date" id="rule_end_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                    </div>
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+                <button type="button" onclick="closeRecurringModal()" class="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
+                <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm">Save Rule</button>
             </div>
         </form>
     </div>
@@ -73,4 +202,42 @@
 
 {% block scripts %}
 <script src="{% static 'js/modal.js' %}"></script>
+<script>
+    function openRecurringModal(mode, data = {}) {
+        const modal = document.getElementById('recurringModal');
+        const title = document.getElementById('recurringModalTitle');
+        const ruleId = document.getElementById('modal_rule_id');
+        const descInput = document.getElementById('rule_description');
+        const amountInput = document.getElementById('rule_amount');
+        const catInput = document.getElementById('rule_category');
+        const freqInput = document.getElementById('rule_frequency');
+        const startDateInput = document.getElementById('rule_start_date');
+        const endDateInput = document.getElementById('rule_end_date');
+
+        if (mode === 'edit') {
+            title.textContent = 'Edit Recurring Rule';
+            ruleId.value = data.id;
+            descInput.value = data.description;
+            amountInput.value = data.amount;
+            catInput.value = data.category;
+            freqInput.value = data.frequency;
+            startDateInput.value = data.start_date;
+            endDateInput.value = data.end_date || '';
+        } else {
+            title.textContent = 'New Recurring Expense Rule';
+            ruleId.value = '';
+            descInput.value = '';
+            amountInput.value = '';
+            catInput.value = '';
+            freqInput.value = 'MONTHLY';
+            startDateInput.value = new Date().toISOString().split('T')[0];
+            endDateInput.value = '';
+        }
+        modal.classList.remove('hidden');
+    }
+
+    function closeRecurringModal() {
+        document.getElementById('recurringModal').classList.add('hidden');
+    }
+</script>
 {% endblock %}

@@ -18,7 +18,7 @@
     <!-- Category Table Card -->
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-visible">
         <div class="p-5 border-b border-gray-100 flex justify-between items-center min-h-[68px]">
-            <h2 class="text-lg font-bold text-gray-800">Transaction Categories & Monthly Budgets</h2>
+            <h2 class="text-lg font-bold text-gray-800">Transaction Categories & Target Budgets</h2>
             <span class="text-xs font-semibold text-gray-500">Total: {{ categories|length }} Categories</span>
         </div>
 
@@ -27,7 +27,7 @@
                 <thead>
                     <tr class="bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500 uppercase tracking-wider select-none">
                         <th class="py-3.5 px-6 min-w-[200px]">Category Name</th>
-                        <th class="py-3.5 px-6 text-right min-w-[160px]">Monthly Budget Target</th>
+                        <th class="py-3.5 px-6 text-right min-w-[160px]">Target Budget</th>
                         <th class="py-3.5 px-6 text-center min-w-[130px]">Actions</th>
                     </tr>
                 </thead>
@@ -81,7 +81,7 @@
         </div>
 
         <!-- Modal Body (Form) -->
-        <form method="POST" class="p-6 space-y-4">
+        <form method="POST" action="{% url 'settings' %}" class="p-6 space-y-4">
             {% csrf_token %}
             <input type="hidden" name="action" id="modalCategoryAction" value="add_category">
             <input type="hidden" name="category_id" id="modalCategoryId">

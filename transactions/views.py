@@ -4,36 +4,75 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 from django.contrib.auth import login
-from .forms import TransactionForm, PaycheckTransactionForm, PaycheckTemplateForm
-from .models import Transaction, PaycheckTransaction, PaycheckTemplate, Category
+from .forms import TransactionForm, PaycheckTransactionForm, PaycheckTemplateForm, RecurringTransactionTemplateForm
+from .models import Transaction, PaycheckTransaction, PaycheckTemplate, Category, CategoryBudget, RecurringTransactionTemplate
 from django.db.models import Sum, Q, Value, DecimalField
 from django.db.models.functions import Coalesce, ExtractYear, ExtractMonth
 from decimal import Decimal, InvalidOperation
 import calendar
+import datetime
 
 
 @login_required
 def home(request):
     if request.method == "POST":
         action_type = request.POST.get('action_type')
-        delete_id = request.POST.get('delete_id')
-        transaction_id = request.POST.get('transaction_id')
 
-        # 1. Handle Bulk Delete
-        if action_type == 'bulk_delete' or request.POST.get('bulk_delete'):
-            transaction_ids = request.POST.getlist('transaction_ids')
-            if transaction_ids:
-                Transaction.objects.filter(user=request.user, id__in=transaction_ids).delete()
-
-        # 2. Handle Single Row Delete
-        elif action_type == 'single_delete' or delete_id:
-            target_id = delete_id or request.POST.get('delete_id')
-            if target_id:
-                transaction = get_object_or_404(Transaction, pk=target_id, user=request.user)
+        # 1. Handle Single Row Delete
+        if action_type == 'single_delete' or request.POST.get('delete_id'):
+            delete_id = request.POST.get('delete_id') or request.POST.get('single_delete')
+            if delete_id:
+                transaction = get_object_or_404(Transaction, pk=delete_id, user=request.user)
+                if transaction.recurring_template:
+                    template = transaction.recurring_template
+                    date_str = transaction.date.strftime('%Y-%m-%d')
+                    if date_str not in template.skipped_dates:
+                        template.skipped_dates.append(date_str)
+                        template.save()
                 transaction.delete()
 
-        # 3. Handle Add / Edit Transaction
+        # 2. Handle Bulk Delete
+        elif action_type == 'bulk_delete' or request.POST.get('bulk_delete'):
+            transaction_ids = request.POST.getlist('transaction_ids')
+            if transaction_ids:
+                transactions = Transaction.objects.filter(user=request.user, id__in=transaction_ids)
+                for tx in transactions:
+                    if tx.recurring_template:
+                        template = tx.recurring_template
+                        date_str = tx.date.strftime('%Y-%m-%d')
+                        if date_str not in template.skipped_dates:
+                            template.skipped_dates.append(date_str)
+                            template.save()
+                transactions.delete()
+
+        # 3. Delete Recurring Rule Card (Does NOT delete existing transactions)
+        elif request.POST.get('delete_rule_id'):
+            rule = get_object_or_404(RecurringTransactionTemplate, pk=request.POST.get('delete_rule_id'), user=request.user)
+            rule.delete()  # On delete SET_NULL keeps existing transactions!
+
+        # 4. Create or Edit Recurring Rule Template
+        elif request.POST.get('form_type') == 'recurring':
+            rule_id = request.POST.get('rule_id')
+            if rule_id:
+                instance = get_object_or_404(RecurringTransactionTemplate, pk=rule_id, user=request.user)
+                template_form = RecurringTransactionTemplateForm(request.POST, instance=instance)
+                if template_form.is_valid():
+                    template = template_form.save()
+                    # Keep old posted transactions intact, only sync missing/future ones
+                    template.sync_missing_transactions()
+            else:
+                template_form = RecurringTransactionTemplateForm(request.POST)
+                if template_form.is_valid():
+                    template = template_form.save(commit=False)
+                    template.user = request.user
+                    template.save()
+                    template.generate_historical_transactions()
+
+            return redirect('home')
+
+        # 5. Handle Add / Edit Single Transaction
         else:
+            transaction_id = request.POST.get('transaction_id')
             if transaction_id:
                 instance = get_object_or_404(Transaction, pk=transaction_id, user=request.user)
                 form = TransactionForm(request.POST, instance=instance)
@@ -42,15 +81,13 @@ def home(request):
 
             if form.is_valid():
                 transaction = form.save(commit=False)
-                transaction.user = request.user  # 💡 Attach user
+                transaction.user = request.user
                 transaction.save()
 
-        # HTMX Check
         if request.headers.get('HX-Request'):
             form = TransactionForm()
             form.fields['category'].queryset = Category.objects.filter(user=request.user)
             transactions = Transaction.objects.filter(user=request.user).order_by('-date')
-            
             paginator = Paginator(transactions, 25)
             page_obj = paginator.get_page(1)
 
@@ -58,34 +95,32 @@ def home(request):
                 'form': form,
                 'transactions': page_obj,
                 'current_filters': {
-                    'search': '',
-                    'categories': [],
-                    'start_date': '',
-                    'end_date': '',
-                    'min_amount': '',
-                    'max_amount': '',
-                    'sort_by': 'date',
-                    'direction': 'desc',
-                    'next_direction': 'asc',
+                    'search': '', 'categories': [], 'start_date': '', 'end_date': '',
+                    'min_amount': '', 'max_amount': '', 'sort_by': 'date', 'direction': 'desc', 'next_direction': 'asc',
                 }
             }
             return render(request, "transactions/_table.html", context)
 
         return redirect('home')
-            
+
     # --- GET REQUEST ---
+    active_templates = RecurringTransactionTemplate.objects.filter(user=request.user)
+    for template in active_templates:
+        template.sync_missing_transactions()
+
     form = TransactionForm()
-    # Filter category dropdown options to logged-in user
     form.fields['category'].queryset = Category.objects.filter(user=request.user)
     
+    recurring_form = RecurringTransactionTemplateForm()
+    recurring_form.fields['category'].queryset = Category.objects.filter(user=request.user)
+
     transactions = Transaction.objects.filter(user=request.user)
 
-    # 1. Multi-Select Categories
+    # Filter & Sort queries...
     selected_categories = request.GET.getlist('category')
     if selected_categories:
         transactions = transactions.filter(category__in=selected_categories)
 
-    # 2. Date Range
     start_date = request.GET.get('start_date', '')
     end_date = request.GET.get('end_date', '')
     if start_date:
@@ -93,12 +128,10 @@ def home(request):
     if end_date:
         transactions = transactions.filter(date__lte=end_date)
 
-    # 3. Description Search
     search_query = request.GET.get('search', '')
     if search_query:
         transactions = transactions.filter(description__icontains=search_query)
 
-    # 4. Amount Filter
     min_amount = request.GET.get('min_amount', '')
     max_amount = request.GET.get('max_amount', '')
     if min_amount:
@@ -106,18 +139,15 @@ def home(request):
     if max_amount:
         transactions = transactions.filter(amount__lte=float(max_amount))
 
-    # 5. Sorting
     sort_by = request.GET.get('sort_by', 'date')
     direction = request.GET.get('direction', 'desc')
     allowed_sort = {'date': 'date', 'description': 'description', 'category': 'category', 'amount': 'amount'}
     db_field = allowed_sort.get(sort_by, 'date')
-    
+
     if direction == 'desc':
         transactions = transactions.order_by(f'-{db_field}')
     else:
         transactions = transactions.order_by(db_field)
-
-    next_direction = 'asc' if direction == 'desc' else 'desc'
 
     paginator = Paginator(transactions, 25)
     page_number = request.GET.get('page', 1)
@@ -125,17 +155,13 @@ def home(request):
 
     context = {
         'form': form,
+        'recurring_form': recurring_form,
         'transactions': page_obj,
+        'active_templates': active_templates,
         'current_filters': {
-            'search': search_query,
-            'categories': selected_categories,
-            'start_date': start_date,
-            'end_date': end_date,
-            'min_amount': min_amount,
-            'max_amount': max_amount,
-            'sort_by': sort_by,
-            'direction': direction,
-            'next_direction': next_direction,
+            'search': search_query, 'categories': selected_categories, 'start_date': start_date,
+            'end_date': end_date, 'min_amount': min_amount, 'max_amount': max_amount,
+            'sort_by': sort_by, 'direction': direction, 'next_direction': 'asc' if direction == 'desc' else 'desc',
         }
     }
 
@@ -317,6 +343,14 @@ def analytics(request):
         expense_qs = expense_qs.filter(date__month__in=selected_months)
         income_qs = income_qs.filter(date__month__in=selected_months)
 
+    all_years = sorted(list(set(
+        list(Transaction.objects.filter(user=request.user).dates('date', 'year').values_list('date__year', flat=True)) +
+        list(PaycheckTransaction.objects.filter(user=request.user).dates('date', 'year').values_list('date__year', flat=True))
+    )), reverse=True)
+
+    target_years = selected_years if selected_years else (all_years if all_years else [datetime.date.today().year])
+    target_months = selected_months if selected_months else list(range(1, 13))
+
     # KPIs
     total_spend = expense_qs.aggregate(
         total=Coalesce(Sum('amount'), Value(0), output_field=DecimalField())
@@ -333,20 +367,36 @@ def analytics(request):
     if selected_category_ids:
         categories_qs = categories_qs.filter(id__in=selected_category_ids)
 
-    num_months = len(selected_months) if selected_months else 1
-
     cat_labels = []
     cat_spend = []
     cat_budgets = []
     budget_progress_list = []
     total_budget_sum = Decimal('0.00')
 
+    # 💡 RESOLVE HISTORICAL BUDGET FOR EACH TARGET MONTH
     for cat in categories_qs:
         spend = expense_qs.filter(category=cat).aggregate(
             total=Coalesce(Sum('amount'), Value(0), output_field=DecimalField())
         )['total']
-        
-        target_budget = cat.monthly_budget * Decimal(num_months)
+
+        history_records = list(cat.budget_history.order_by('effective_start_date'))
+
+        target_budget = Decimal('0.00')
+        for y in target_years:
+            for m in target_months:
+                # End of month date boundary
+                month_end = datetime.date(y, m, calendar.monthrange(y, m)[1])
+
+                # Find the latest budget effective on or before the end of this month
+                active_budget = cat.monthly_budget # default fallback
+                for record in history_records:
+                    if record.effective_start_date <= month_end:
+                        active_budget = record.amount
+                    else:
+                        break
+
+                target_budget += active_budget
+
         total_budget_sum += target_budget
 
         percent_used = float((spend / target_budget * 100)) if target_budget > 0 else (100.0 if spend > 0 else 0.0)
@@ -404,12 +454,6 @@ def analytics(request):
     trend_spend = [exp_map.get(k, 0.0) for k in all_keys]
     trend_income = [inc_map.get(k, 0.0) for k in all_keys]
 
-    # Filter Dropdowns
-    all_years = sorted(list(set(
-        list(Transaction.objects.filter(user=request.user).dates('date', 'year').values_list('date__year', flat=True)) +
-        list(PaycheckTransaction.objects.filter(user=request.user).dates('date', 'year').values_list('date__year', flat=True))
-    )), reverse=True)
-
     month_choices = [(i, calendar.month_abbr[i]) for i in range(1, 13)]
     category_options = Category.objects.filter(user=request.user)
 
@@ -445,11 +489,11 @@ def analytics(request):
 
     return render(request, "transactions/analytics.html", context)
 
-
 @login_required
 def settings(request):
     if request.method == "POST":
         action = request.POST.get('action')
+        today = datetime.date.today()
 
         # 1. Add New Category
         if action == 'add_category':
@@ -461,13 +505,23 @@ def settings(request):
                 monthly_budget = Decimal('0.00')
 
             if category_name:
-                Category.objects.get_or_create(
+                cat, created = Category.objects.get_or_create(
                     user=request.user, 
                     name=category_name, 
                     defaults={'monthly_budget': monthly_budget}
                 )
+                if not created:
+                    cat.monthly_budget = monthly_budget
+                    cat.save()
 
-        # 2. Edit Existing Category
+                # Log effective date record
+                CategoryBudget.objects.create(
+                    category=cat,
+                    effective_start_date=today,
+                    amount=monthly_budget
+                )
+
+        # 2. Edit Category Budget
         elif action == 'edit_category':
             category_id = request.POST.get('category_id')
             new_name = request.POST.get('name', '').strip()
@@ -477,11 +531,27 @@ def settings(request):
                 cat = get_object_or_404(Category, pk=category_id, user=request.user)
                 cat.name = new_name
                 try:
-                    cat.monthly_budget = Decimal(raw_budget) if raw_budget else Decimal('0.00')
+                    monthly_budget = Decimal(raw_budget) if raw_budget else Decimal('0.00')
                 except InvalidOperation:
-                    pass
+                    monthly_budget = Decimal('0.00')
+                
+                cat.monthly_budget = monthly_budget  # Updates current baseline
                 cat.save()
 
+                # Safely handle edits made on the exact same day
+                todays_record = CategoryBudget.objects.filter(
+                    category=cat, 
+                    effective_start_date=today
+                )
+                
+                if todays_record.exists():
+                    todays_record.update(amount=monthly_budget)
+                else:
+                    CategoryBudget.objects.create(
+                        category=cat,
+                        effective_start_date=today,
+                        amount=monthly_budget
+                    )
         # 3. Delete Category
         elif action == 'delete_category':
             category_id = request.POST.get('category_id')
@@ -522,3 +592,4 @@ def signup(request):
     else:
         form = UserCreationForm()
     return render(request, 'registration/signup.html', {'form': form})
+
