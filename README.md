@@ -57,7 +57,7 @@ Ensure you have **Python 3.10+** and **Git** installed on your machine.
 
 ### 2. Clone the Repository & Set Up Virtual Environment
 ```bash
-git clone [https://github.com/kevzjhu/pennywise.git](https://github.com/kevzjhu/pennywise.git)
+git clone https://github.com/kevzjhu/pennywise.git
 cd pennywise
 
 # Create virtual environment
