@@ -11,13 +11,143 @@ from django.db.models.functions import Coalesce, ExtractYear, ExtractMonth
 from decimal import Decimal, InvalidOperation
 import calendar
 import datetime
+from .services import validate_and_parse_wealthsimple_csv, validate_and_parse_rbc_csv
 
+def get_home_context(request):
+    """Helper to build and return the standard context dictionary for home.html."""
+    active_templates = RecurringTransactionTemplate.objects.filter(user=request.user)
+    for template in active_templates:
+        template.sync_missing_transactions()
+
+    form = TransactionForm()
+    form.fields['category'].queryset = Category.objects.filter(user=request.user)
+    
+    recurring_form = RecurringTransactionTemplateForm()
+    recurring_form.fields['category'].queryset = Category.objects.filter(user=request.user)
+
+    transactions = Transaction.objects.filter(user=request.user)
+
+    # Filter & Sort queries...
+    selected_categories = request.GET.getlist('category')
+    if selected_categories:
+        transactions = transactions.filter(category__in=selected_categories)
+
+    start_date = request.GET.get('start_date', '')
+    end_date = request.GET.get('end_date', '')
+    if start_date:
+        transactions = transactions.filter(date__gte=start_date)
+    if end_date:
+        transactions = transactions.filter(date__lte=end_date)
+
+    search_query = request.GET.get('search', '')
+    if search_query:
+        transactions = transactions.filter(description__icontains=search_query)
+
+    min_amount = request.GET.get('min_amount', '')
+    max_amount = request.GET.get('max_amount', '')
+    if min_amount:
+        transactions = transactions.filter(amount__gte=float(min_amount))
+    if max_amount:
+        transactions = transactions.filter(amount__lte=float(max_amount))
+
+    sort_by = request.GET.get('sort_by', 'date')
+    direction = request.GET.get('direction', 'desc')
+    allowed_sort = {'date': 'date', 'description': 'description', 'category': 'category', 'amount': 'amount'}
+    db_field = allowed_sort.get(sort_by, 'date')
+
+    if direction == 'desc':
+        transactions = transactions.order_by(f'-{db_field}')
+    else:
+        transactions = transactions.order_by(db_field)
+
+    paginator = Paginator(transactions, 25)
+    page_number = request.GET.get('page', 1)
+    page_obj = paginator.get_page(page_number)
+
+    return {
+        'form': form,
+        'recurring_form': recurring_form,
+        'transactions': page_obj,
+        'active_templates': active_templates,
+        'current_filters': {
+            'search': search_query, 'categories': selected_categories, 'start_date': start_date,
+            'end_date': end_date, 'min_amount': min_amount, 'max_amount': max_amount,
+            'sort_by': sort_by, 'direction': direction, 'next_direction': 'asc' if direction == 'desc' else 'desc',
+        }
+    }
 
 @login_required
 def home(request):
     if request.method == "POST":
         action_type = request.POST.get('action_type')
 
+        # 1. Stage CSV for Review
+        if action_type == 'stage_csv':
+            csv_file = request.FILES.get('csv_file')
+            bank = request.POST.get('bank')
+
+            try:
+                if bank == 'wealthsimple':
+                    candidate_rows = validate_and_parse_wealthsimple_csv(csv_file, request.user)
+                elif bank == 'rbc':
+                    candidate_rows = validate_and_parse_rbc_csv(csv_file, request.user)
+                else:
+                    raise ValueError(f"CSV parsing for '{bank.upper()}' is not supported yet.")
+
+                user_categories = Category.objects.filter(user=request.user)
+
+                context = get_home_context(request)
+                context.update({
+                    'show_review_modal': True,
+                    'candidate_rows': candidate_rows,
+                    'user_categories': user_categories,
+                })
+                return render(request, "transactions/home.html", context)
+
+            except ValueError as e:
+                context = get_home_context(request)
+                context.update({
+                    'csv_error': str(e),
+                    'show_import_modal': True,
+                })
+                return render(request, "transactions/home.html", context)
+
+        # 2. Confirm CSV Import (Final Save Step)
+        elif action_type == 'confirm_csv_import':
+            selected_indices = request.POST.getlist('selected_rows')
+            transactions_to_create = []
+
+            for idx in selected_indices:
+                raw_date = request.POST.get(f'date_{idx}')
+                description = request.POST.get(f'description_{idx}', '').strip()
+                raw_amount = request.POST.get(f'amount_{idx}', '0.00')
+                category_id = request.POST.get(f'category_{idx}')
+
+                # Require valid date, description, amount, and category for selected rows
+                if raw_date and description and raw_amount and category_id:
+                    try:
+                        tx_date = datetime.datetime.strptime(raw_date, '%Y-%m-%d').date()
+                        amount = Decimal(raw_amount)
+                        category = Category.objects.filter(user=request.user, pk=category_id).first()
+
+                        if category:
+                            transactions_to_create.append(
+                                Transaction(
+                                    user=request.user,
+                                    date=tx_date,
+                                    description=description,
+                                    amount=amount,
+                                    category=category
+                                )
+                            )
+                    except (ValueError, InvalidOperation):
+                        continue
+
+            if transactions_to_create:
+                Transaction.objects.bulk_create(transactions_to_create)
+
+            return redirect('home')
+        
         # 1. Handle Single Row Delete
         if action_type == 'single_delete' or request.POST.get('delete_id'):
             delete_id = request.POST.get('delete_id') or request.POST.get('single_delete')

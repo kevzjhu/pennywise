@@ -11,10 +11,17 @@
         <p class="text-sm text-gray-500 mt-1">Manage cash outflows, set up recurring expenses, and track items.</p>
     </div>
     <div class="flex items-center gap-3">
+        <!-- Import CSV Button -->
+        <button onclick="openImportModal()"
+            class="bg-white hover:bg-gray-50 text-gray-700 font-medium px-4 py-2.5 rounded-lg border border-gray-300 shadow-sm transition flex items-center gap-2 text-sm cursor-pointer">
+            <span>📥</span> Import CSV
+        </button>
+        <!-- Recurring Rule Button -->
         <button onclick="openRecurringModal('add')"
             class="bg-white hover:bg-gray-50 text-gray-700 font-medium px-4 py-2.5 rounded-lg border border-gray-300 shadow-sm transition flex items-center gap-2 text-sm cursor-pointer">
             <span>🔄</span> New Recurring Rule
         </button>
+        <!-- Add Transaction Button -->
         <button onclick="openModal('add')"
             class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-2.5 rounded-lg shadow-sm transition flex items-center gap-2 text-sm cursor-pointer">
             <span>+</span> Log Transaction
@@ -58,7 +65,6 @@
             </div>
             
             <div class="flex items-center gap-1">
-                <!-- Edit Rule Button -->
                 <button onclick="openRecurringModal('edit', {
                         id: '{{ template.id }}',
                         description: '{{ template.description|escapejs }}',
@@ -72,7 +78,6 @@
                     Edit
                 </button>
 
-                <!-- Delete Rule Button -->
                 <form method="POST" action="{% url 'home' %}" onsubmit="return confirm('Stop auto-generating future transactions for {{ template.description }}? Existing transactions will remain.');">
                     {% csrf_token %}
                     <input type="hidden" name="delete_rule_id" value="{{ template.id }}">
@@ -94,6 +99,155 @@
 <!-- Dynamic Table Container (HTMX Target) -->
 <div id="table-container">
     {% include "transactions/_table.html" %}
+</div>
+
+<!-- CSV Upload Modal with Error Handling -->
+<div id="importCsvModal" class="fixed inset-0 bg-gray-900/40 backdrop-blur-sm {% if not show_import_modal %}hidden{% endif %} flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6 relative">
+        <div class="flex justify-between items-center pb-3 border-b border-gray-100 mb-4">
+            <h3 class="text-lg font-bold text-gray-800">Import Statement CSV</h3>
+            <button onclick="closeImportModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none cursor-pointer">&times;</button>
+        </div>
+
+        {% if csv_error %}
+        <div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-xs font-semibold text-red-700 flex items-start gap-2">
+            <span>⚠️</span>
+            <div>{{ csv_error }}</div>
+        </div>
+        {% endif %}
+
+        <form id="importCsvForm" method="POST" enctype="multipart/form-data" action="{% url 'home' %}">
+            {% csrf_token %}
+            <input type="hidden" name="action_type" value="stage_csv">
+
+            <div class="space-y-4">
+                <p class="text-sm text-gray-600">
+                    Upload your credit card statement in a CSV format to import transactions.
+                </p>
+
+                <div>
+                    <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Select Bank / Institution</label>
+                    <select name="bank" id="bank_select" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="wealthsimple" selected>Wealthsimple</option>
+                        <option value="rbc">RBC Royal Bank</option>
+                        <option value="td">TD Canada Trust</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Statement File (.csv)</label>
+                    <div id="drop_zone" onclick="document.getElementById('csv_file_input').click()"
+                         class="border-2 border-dashed border-gray-300 hover:border-blue-500 hover:bg-blue-50/50 rounded-xl p-6 text-center cursor-pointer transition flex flex-col items-center justify-center space-y-2">
+                        <div class="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-xl">📄</div>
+                        <p class="text-xs font-semibold text-gray-700" id="drop_zone_prompt">Drag & drop your CSV file here, or <span class="text-blue-600 underline">browse</span></p>
+                        <p class="text-[11px] text-gray-400" id="file_name_display">Supports .csv files up to 5MB</p>
+                        <input type="file" id="csv_file_input" name="csv_file" accept=".csv" class="hidden" onchange="handleFileSelect(this.files)">
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+                <button type="button" onclick="closeImportModal()" class="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition cursor-pointer">Cancel</button>
+                <button type="submit" id="submit_csv_btn" disabled class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed rounded-lg shadow-sm transition cursor-pointer">Continue to Review</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+<!-- CSV Review & Confirmation Modal -->
+
+<div id="reviewCsvModal" class="fixed inset-0 bg-gray-900/50 backdrop-blur-sm {% if not show_review_modal %}hidden{% endif %} flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl p-6 relative flex flex-col max-h-[90vh]">
+        <div class="flex justify-between items-center pb-3 border-b border-gray-100 mb-4">
+            <div>
+                <h3 class="text-lg font-bold text-gray-800">Review Transactions to Import</h3>
+                <p class="text-xs text-gray-500 mt-0.5">Edit details, assign categories, and select purchases to import.</p>
+            </div>
+            <a href="{% url 'home' %}" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</a>
+        </div>
+
+        <form method="POST" action="{% url 'home' %}" class="flex flex-col flex-1 overflow-hidden">
+            {% csrf_token %}
+            <input type="hidden" name="action_type" value="confirm_csv_import">
+
+            <div class="overflow-y-auto flex-1 border border-gray-200 rounded-lg">
+                <table class="w-full text-left border-collapse text-xs">
+                    <thead class="bg-gray-50 border-b border-gray-200 font-semibold text-gray-600 uppercase tracking-wider sticky top-0 bg-gray-50">
+                        <tr>
+                            <th class="py-3 px-3 w-10 text-center">
+                                <input type="checkbox" id="selectAllCsv" checked onchange="toggleSelectAllCsv(this)" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4">
+                            </th>
+                            <th class="py-3 px-3">Date</th>
+                            <th class="py-3 px-3">Description</th>
+                            <th class="py-3 px-3 w-28">Amount ($)</th>
+                            <th class="py-3 px-3 w-44">Category</th>
+                            <th class="py-3 px-3 w-24 text-center">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                    {% for row in candidate_rows %}
+                    <tr class="hover:bg-gray-50/50 transition {% if not row.selected %}opacity-60{% endif %}" id="row_container_{{ row.index }}">
+                        <td class="py-2.5 px-3 text-center">
+                            <!-- 💡 Added onchange handler to toggle required attribute dynamically -->
+                            <input type="checkbox" 
+                                name="selected_rows" 
+                                value="{{ row.index }}" 
+                                {% if row.selected %}checked{% endif %} 
+                                onchange="toggleCategoryRequired(this)"
+                                class="csv-row-checkbox rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer">
+                        </td>
+                        <td class="py-2.5 px-3">
+                            <input type="date" name="date_{{ row.index }}" value="{{ row.date }}" class="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 text-xs">
+                        </td>
+                        <td class="py-2.5 px-3">
+                            <input type="text" name="description_{{ row.index }}" value="{{ row.description }}" class="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 text-xs">
+                        </td>
+                        <td class="py-2.5 px-3">
+                            <input type="number" step="0.01" name="amount_{{ row.index }}" value="{{ row.amount }}" class="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 text-xs font-semibold text-gray-900">
+                        </td>
+                        <td class="py-2.5 px-3">
+                            <!-- 💡 'required' attribute is conditionally set only if selected by default -->
+                            <select name="category_{{ row.index }}" 
+                                    id="category_select_{{ row.index }}" 
+                                    {% if row.selected %}required{% endif %} 
+                                    class="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 text-xs bg-white">
+                                <option value="" disabled selected>Select Category</option>
+                                {% for cat in user_categories %}
+                                <option value="{{ cat.id }}">{{ cat.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td class="py-2.5 px-3 text-center">
+                            {% if row.status == 'Duplicate' %}
+                            <span class="inline-block px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 rounded-md">
+                                Duplicate
+                            </span>
+                            {% elif row.status == 'Possible Duplicate' %}
+                            <span class="inline-block px-2 py-0.5 text-[10px] font-bold bg-orange-100 text-orange-800 rounded-md" title="Same date & amount as existing transaction, but description differs.">
+                                Possible Duplicate
+                            </span>
+                            {% else %}
+                            <span class="inline-block px-2 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-800 rounded-md">
+                                New
+                            </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="flex justify-between items-center mt-4 pt-3 border-t border-gray-100">
+                <span class="text-xs text-gray-500">Uncheck rows you wish to skip during import.</span>
+                <div class="flex gap-3">
+                    <a href="{% url 'home' %}" class="px-4 py-2 text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition">Cancel</a>
+                    <button type="submit" class="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition">Import Selected Transactions</button>
+                </div>
+            </div>
+        </form>
+    </div>
 </div>
 
 <!-- Log/Edit Transaction Modal -->
@@ -203,6 +357,67 @@
 {% block scripts %}
 <script src="{% static 'js/modal.js' %}"></script>
 <script>
+    // CSV Modal Handlers
+    function openImportModal() {
+        document.getElementById('importCsvModal').classList.remove('hidden');
+    }
+
+    function closeImportModal() {
+        document.getElementById('importCsvModal').classList.add('hidden');
+        resetFileSelection();
+    }
+
+    function handleFileSelect(files) {
+        if (files && files.length > 0) {
+            const file = files[0];
+            if (file.name.toLowerCase().endsWith('.csv')) {
+                document.getElementById('drop_zone_prompt').innerHTML = `<span class="text-emerald-600 font-bold">Selected: ${file.name}</span>`;
+                document.getElementById('file_name_display').textContent = `${(file.size / 1024).toFixed(1)} KB`;
+                document.getElementById('submit_csv_btn').disabled = false;
+            } else {
+                alert('Please select a valid .csv file.');
+                resetFileSelection();
+            }
+        }
+    }
+
+    function resetFileSelection() {
+        document.getElementById('csv_file_input').value = '';
+        document.getElementById('drop_zone_prompt').innerHTML = `Drag & drop your CSV file here, or <span class="text-blue-600 underline">browse</span>`;
+        document.getElementById('file_name_display').textContent = 'Supports .csv files up to 5MB';
+        document.getElementById('submit_csv_btn').disabled = true;
+    }
+
+    // Drag and drop event handling
+    const dropZone = document.getElementById('drop_zone');
+
+    if (dropZone) {
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.add('border-blue-500', 'bg-blue-50/50'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.remove('border-blue-500', 'bg-blue-50/50'), false);
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            document.getElementById('csv_file_input').files = files;
+            handleFileSelect(files);
+        }, false);
+    }
+
+    // Recurring Expense Modal Handlers
     function openRecurringModal(mode, data = {}) {
         const modal = document.getElementById('recurringModal');
         const title = document.getElementById('recurringModalTitle');
@@ -238,6 +453,30 @@
 
     function closeRecurringModal() {
         document.getElementById('recurringModal').classList.add('hidden');
+    }
+
+    function toggleCategoryRequired(checkbox) {
+        const idx = checkbox.value;
+        const catSelect = document.getElementById(`category_select_${idx}`);
+        const rowContainer = document.getElementById(`row_container_${idx}`);
+
+        if (catSelect) {
+            if (checkbox.checked) {
+                catSelect.setAttribute('required', 'required');
+                if (rowContainer) rowContainer.classList.remove('opacity-60');
+            } else {
+                catSelect.removeAttribute('required');
+                if (rowContainer) rowContainer.classList.add('opacity-60');
+            }
+        }
+    }
+
+    function toggleSelectAllCsv(masterCheckbox) {
+        const checkboxes = document.querySelectorAll('.csv-row-checkbox');
+        checkboxes.forEach(cb => {
+            cb.checked = masterCheckbox.checked;
+            toggleCategoryRequired(cb); // Update required attribute & styling for every row
+        });
     }
 </script>
 {% endblock %}
