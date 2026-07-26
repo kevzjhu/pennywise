@@ -92,11 +92,9 @@ python manage.py runserver
 ---
 ## 📝 To Do List:
 - Transactions: Add import functionality for CC transactions (CSVs)
-- Transactions: Add recurring payments (subscriptions/rent/utilities etc.) much like recurring income rules
-- Analytics: create a sankey
-- Analytics: ML?
+- Analytics: Sankey? ML? Time-series analyses? open to suggestions
 - Deploy and UAT with friends
-- Make it work on my phone
+- Mobile app
 
 ---
 ## 📄 License & Author
