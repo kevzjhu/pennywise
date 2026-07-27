@@ -1,36 +1,36 @@
 <!-- KPI Cards Row (5 Cards Grid) -->
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-    <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-        <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Total Income</p>
-        <p class="text-xl font-bold text-gray-900 mt-1.5">${{ total_income|floatformat:2 }}</p>
+    <div class="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+        <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Total Income</p>
+        <p class="text-xl font-bold text-gray-900 dark:text-white mt-1.5">${{ total_income|floatformat:2 }}</p>
     </div>
-    <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-        <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Total Spend</p>
-        <p class="text-xl font-bold text-gray-900 mt-1.5">${{ total_spend|floatformat:2 }}</p>
+    <div class="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+        <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Total Spend</p>
+        <p class="text-xl font-bold text-gray-900 dark:text-white mt-1.5">${{ total_spend|floatformat:2 }}</p>
     </div>
-    <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-        <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Target Budget</p>
-        <p class="text-xl font-bold text-gray-800 mt-1.5">${{ total_budget|floatformat:2 }}</p>
+    <div class="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+        <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Target Budget</p>
+        <p class="text-xl font-bold text-gray-800 dark:text-gray-200 mt-1.5">${{ total_budget|floatformat:2 }}</p>
     </div>
-    <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-        <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Net Savings</p>
-        <p class="text-xl font-bold {% if net_savings >= 0 %}text-emerald-600{% else %}text-red-600{% endif %} mt-1.5">
+    <div class="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+        <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Net Savings</p>
+        <p class="text-xl font-bold {% if net_savings >= 0 %}text-emerald-600 dark:text-emerald-400{% else %}text-red-600 dark:text-red-400{% endif %} mt-1.5">
             ${{ net_savings|floatformat:2 }}
         </p>
     </div>
-    <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-        <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Savings Rate %</p>
-        <p class="text-xl font-bold text-blue-600 mt-1.5">{{ savings_rate|floatformat:2 }}%</p>
+    <div class="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+        <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Savings Rate %</p>
+        <p class="text-xl font-bold text-blue-600 dark:text-blue-400 mt-1.5">{{ savings_rate|floatformat:2 }}%</p>
     </div>
 </div>
 
 <!-- Charts Row (Side by Side) -->
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
     <!-- Spend vs Budget by Category (Grouped Bar) -->
-    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between">
+    <div class="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col justify-between">
         <div class="flex justify-between items-center mb-4">
-            <h3 class="text-sm font-bold text-gray-800">Actual Spend vs Target Budget</h3>
-            <span class="text-[10px] text-gray-400 font-medium">By Category</span>
+            <h3 class="text-sm font-bold text-gray-800 dark:text-white">Actual Spend vs Target Budget</h3>
+            <span class="text-[10px] text-gray-400 dark:text-gray-500 font-medium">By Category</span>
         </div>
         <div class="relative h-72">
             <canvas id="categoryChart"></canvas>
@@ -38,10 +38,10 @@
     </div>
 
     <!-- Spend & Income Trend -->
-    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between">
+    <div class="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col justify-between">
         <div class="flex justify-between items-center mb-4">
-            <h3 class="text-sm font-bold text-gray-800">Total Spend & Total Income by Month</h3>
-            <span class="text-[10px] text-gray-400 font-medium">Monthly Trend</span>
+            <h3 class="text-sm font-bold text-gray-800 dark:text-white">Total Spend & Total Income by Month</h3>
+            <span class="text-[10px] text-gray-400 dark:text-gray-500 font-medium">Monthly Trend</span>
         </div>
         <div class="relative h-72">
             <canvas id="trendChart"></canvas>
@@ -50,44 +50,44 @@
 </div>
 
 <!-- Category Budget Health Progress Bars -->
-<div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm mb-6">
-    <h3 class="text-sm font-bold text-gray-800 mb-4">Category Budget Performance</h3>
+<div class="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
+    <h3 class="text-sm font-bold text-gray-800 dark:text-white mb-4">Category Budget Performance</h3>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {% for item in budget_progress_list %}
-        <div class="bg-gray-50/70 p-3.5 rounded-lg border border-gray-100 space-y-2">
+        <div class="bg-gray-50/70 dark:bg-gray-700/50 p-3.5 rounded-lg border border-gray-100 dark:border-gray-700 space-y-2">
             <div class="flex justify-between items-center text-xs">
-                <span class="font-semibold text-gray-800">{{ item.name }}</span>
+                <span class="font-semibold text-gray-800 dark:text-gray-200">{{ item.name }}</span>
                 <span class="font-bold {{ item.text_color }}">{{ item.raw_percent|floatformat:1 }}%</span>
             </div>
             
             <!-- Progress Track -->
-            <div class="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
+            <div class="w-full bg-gray-200 dark:bg-gray-600 h-2 rounded-full overflow-hidden">
                 <div class="{{ item.status_color }} h-full rounded-full transition-all duration-300" style="width: {{ item.percent }}%;"></div>
             </div>
 
-            <div class="flex justify-between items-center text-[11px] text-gray-500">
-                <span>Spent: <strong class="text-gray-700">${{ item.spend|floatformat:2 }}</strong></span>
-                <span>Budget: <strong class="text-gray-700">${{ item.budget|floatformat:2 }}</strong></span>
+            <div class="flex justify-between items-center text-[11px] text-gray-500 dark:text-gray-400">
+                <span>Spent: <strong class="text-gray-700 dark:text-gray-200">${{ item.spend|floatformat:2 }}</strong></span>
+                <span>Budget: <strong class="text-gray-700 dark:text-gray-200">${{ item.budget|floatformat:2 }}</strong></span>
             </div>
         </div>
         {% empty %}
-        <p class="text-xs text-gray-400 col-span-full py-2">No category budget data available.</p>
+        <p class="text-xs text-gray-400 dark:text-gray-500 col-span-full py-2">No category budget data available.</p>
         {% endfor %}
     </div>
 </div>
 
 <!-- Full Width Filtered Transactions Table -->
-<div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-    <div class="p-5 border-b border-gray-100 flex justify-between items-center">
-        <h3 class="text-base font-bold text-gray-800">Filtered Transactions</h3>
-        <span class="text-xs font-semibold text-gray-500">
+<div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+    <div class="p-5 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+        <h3 class="text-base font-bold text-gray-800 dark:text-white">Filtered Transactions</h3>
+        <span class="text-xs font-semibold text-gray-500 dark:text-gray-400">
             Total Items: {{ transactions.paginator.count }}
         </span>
     </div>
 
     <div class="overflow-x-auto w-full">
         <table class="w-full text-left border-collapse text-sm">
-            <thead class="bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500 uppercase tracking-wider select-none">
+            <thead class="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700 text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider select-none">
                 <tr>
                     <th class="py-3 px-4">Date</th>
                     <th class="py-3 px-4">Description</th>
@@ -95,21 +95,21 @@
                     <th class="py-3 px-4 text-right">Amount</th>
                 </tr>
             </thead>
-            <tbody class="divide-y divide-gray-100 text-sm">
+            <tbody class="divide-y divide-gray-100 dark:divide-gray-700 text-sm">
                 {% for t in transactions %}
-                <tr class="hover:bg-gray-50/50 transition">
-                    <td class="py-3.5 px-4 text-gray-600 whitespace-nowrap">{{ t.date|date:"Y-m-d" }}</td>
-                    <td class="py-3.5 px-4 font-medium text-gray-900">{{ t.description }}</td>
+                <tr class="hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition">
+                    <td class="py-3.5 px-4 text-gray-600 dark:text-gray-300 whitespace-nowrap">{{ t.date|date:"Y-m-d" }}</td>
+                    <td class="py-3.5 px-4 font-medium text-gray-900 dark:text-white">{{ t.description }}</td>
                     <td class="py-3.5 px-4">
-                        <span class="inline-block px-2.5 py-1 text-xs font-semibold bg-gray-100 text-gray-700 rounded-md">
+                        <span class="inline-block px-2.5 py-1 text-xs font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md">
                             {{ t.category.name|default:"Uncategorized" }}
                         </span>
                     </td>
-                    <td class="py-3.5 px-4 text-right font-semibold text-gray-900">${{ t.amount }}</td>
+                    <td class="py-3.5 px-4 text-right font-semibold text-gray-900 dark:text-white">${{ t.amount }}</td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="4" class="text-center py-8 text-gray-400">No transactions match active filters.</td>
+                    <td colspan="4" class="text-center py-8 text-gray-400 dark:text-gray-500">No transactions match active filters.</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -118,36 +118,36 @@
 
     <!-- Full-Width Pagination Controls -->
     {% if transactions.paginator.num_pages > 1 %}
-    <div class="px-5 py-3 border-t border-gray-100 flex items-center justify-between bg-gray-50/50 text-xs text-gray-600 select-none">
+    <div class="px-5 py-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800 text-xs text-gray-600 dark:text-gray-300 select-none">
         <div>
-            Showing <span class="font-semibold text-gray-900">{{ transactions.start_index }}</span> to <span class="font-semibold text-gray-900">{{ transactions.end_index }}</span> of <span class="font-semibold text-gray-900">{{ transactions.paginator.count }}</span> items
+            Showing <span class="font-semibold text-gray-900 dark:text-white">{{ transactions.start_index }}</span> to <span class="font-semibold text-gray-900 dark:text-white">{{ transactions.end_index }}</span> of <span class="font-semibold text-gray-900 dark:text-white">{{ transactions.paginator.count }}</span> items
         </div>
 
         <div class="flex items-center gap-1">
             {% if transactions.has_previous %}
             <button hx-get="?page={{ transactions.previous_page_number }}{% for m in selected_months %}&month={{ m }}{% endfor %}{% for y in selected_years %}&year={{ y }}{% endfor %}{% for cat in selected_categories %}&category={{ cat }}{% endfor %}"
                     hx-target="#analytics-dashboard-content" hx-push-url="false"
-                    class="px-2.5 py-1 rounded border border-gray-300 bg-white hover:bg-gray-100 text-gray-700 font-medium transition cursor-pointer">
+                    class="px-2.5 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium transition cursor-pointer">
                 ← Previous
             </button>
             {% else %}
-            <span class="px-2.5 py-1 rounded border border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed">
+            <span class="px-2.5 py-1 rounded border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed">
                 ← Previous
             </span>
             {% endif %}
 
-            <span class="px-3 font-semibold text-gray-700">
+            <span class="px-3 font-semibold text-gray-700 dark:text-gray-300">
                 Page {{ transactions.number }} of {{ transactions.paginator.num_pages }}
             </span>
 
             {% if transactions.has_next %}
             <button hx-get="?page={{ transactions.next_page_number }}{% for m in selected_months %}&month={{ m }}{% endfor %}{% for y in selected_years %}&year={{ y }}{% endfor %}{% for cat in selected_categories %}&category={{ cat }}{% endfor %}"
                     hx-target="#analytics-dashboard-content" hx-push-url="false"
-                    class="px-2.5 py-1 rounded border border-gray-300 bg-white hover:bg-gray-100 text-gray-700 font-medium transition cursor-pointer">
+                    class="px-2.5 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium transition cursor-pointer">
                 Next →
             </button>
             {% else %}
-            <span class="px-2.5 py-1 rounded border border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed">
+            <span class="px-2.5 py-1 rounded border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed">
                 Next →
             </span>
             {% endif %}
@@ -163,6 +163,10 @@
 
         if (window.categoryChartInstance) window.categoryChartInstance.destroy();
         if (window.trendChartInstance) window.trendChartInstance.destroy();
+
+        const isDark = document.documentElement.classList.contains('dark');
+        const textColor = isDark ? '#9ca3af' : '#4b5563'; // gray-400 vs gray-600
+        const gridColor = isDark ? 'rgba(75, 85, 99, 0.2)' : 'rgba(229, 231, 235, 0.5)'; // gray-600/20 vs gray-200/50
 
         const catLabels = {{ cat_labels|safe }};
         const catSpend = {{ cat_spend|safe }};
@@ -187,7 +191,7 @@
                     {
                         label: 'Budget Target',
                         data: catBudgets,
-                        backgroundColor: '#94a3b8',
+                        backgroundColor: isDark ? '#64748b' : '#94a3b8',
                         borderRadius: 4
                     }
                 ]
@@ -197,11 +201,21 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: { 
-                    legend: { position: 'top', align: 'end' } 
+                    legend: { 
+                        position: 'top', 
+                        align: 'end',
+                        labels: { color: textColor }
+                    } 
                 },
                 scales: {
-                    x: { grid: { display: false }, ticks: { callback: v => '$' + v } },
-                    y: { grid: { display: false } }
+                    x: { 
+                        grid: { display: false }, 
+                        ticks: { color: textColor, callback: v => '$' + v } 
+                    },
+                    y: { 
+                        grid: { display: false },
+                        ticks: { color: textColor }
+                    }
                 }
             }
         });
@@ -216,7 +230,8 @@
                         type: 'line',
                         label: 'Total Income',
                         data: trendIncome,
-                        borderColor: '#1e3a8a',
+                        borderColor: isDark ? '#60a5fa' : '#1e3a8a',
+                        backgroundColor: isDark ? '#60a5fa' : '#1e3a8a',
                         borderWidth: 2,
                         pointRadius: 3,
                         fill: false
@@ -225,7 +240,7 @@
                         type: 'bar',
                         label: 'Total Spend',
                         data: trendSpend,
-                        backgroundColor: '#60a5fa',
+                        backgroundColor: isDark ? '#3b82f6' : '#60a5fa',
                         borderRadius: 4
                     }
                 ]
@@ -233,10 +248,22 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { position: 'top', align: 'end' } },
+                plugins: { 
+                    legend: { 
+                        position: 'top', 
+                        align: 'end',
+                        labels: { color: textColor }
+                    } 
+                },
                 scales: {
-                    x: { grid: { display: false } },
-                    y: { grid: { borderDash: [4, 4] }, ticks: { callback: v => '$' + v } }
+                    x: { 
+                        grid: { display: false },
+                        ticks: { color: textColor }
+                    },
+                    y: { 
+                        grid: { color: gridColor, borderDash: [4, 4] }, 
+                        ticks: { color: textColor, callback: v => '$' + v } 
+                    }
                 }
             }
         });

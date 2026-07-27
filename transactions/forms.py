@@ -4,7 +4,18 @@ from .models import Transaction, Category, PaycheckTransaction, PaycheckTemplate
 class RecurringTransactionTemplateForm(forms.ModelForm):
     class Meta:
         model = RecurringTransactionTemplate
-        fields = ['description', 'amount', 'category', 'frequency', 'start_date', 'end_date']
+        fields = ['description', 'amount', 'category', 'frequency', 'start_date', 'end_date', "notes"]
+        widgets = {
+            'start_date': forms.DateInput(attrs={'type': 'date'}),
+            'end_date': forms.DateInput(attrs={'type': 'date'}),
+            'notes': forms.Textarea(attrs={'placeholder': 'Enter default notes for recurring entries...', 'rows': 3, 'maxlength': 200}),
+        }
+
+    def clean_notes(self):
+        notes = self.cleaned_data.get('notes')
+        if notes and len(notes) > 200:
+            raise forms.ValidationError("Notes cannot exceed 200 characters.")
+        return notes
 
 class TransactionForm(forms.ModelForm):
     category = forms.ModelChoiceField(

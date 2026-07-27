@@ -42,6 +42,7 @@ class RecurringTransactionTemplate(models.Model):
     frequency = models.CharField(max_length=20, choices=FREQUENCY_CHOICES)
     start_date = models.DateField()
     end_date = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank = True, null = True)
     created_at = models.DateTimeField(auto_now_add=True)
     skipped_dates = models.JSONField(default=list, blank=True)
 
@@ -72,6 +73,7 @@ class RecurringTransactionTemplate(models.Model):
                         description=self.description,
                         amount=self.amount,
                         category=self.category,
+                        notes = self.notes,
                         date=current_date
                     )
                 )
@@ -113,6 +115,7 @@ class RecurringTransactionTemplate(models.Model):
                         description=self.description,
                         amount=self.amount,
                         category=self.category,
+                        notes = self.notes,
                         date=current_date
                     )
                 )

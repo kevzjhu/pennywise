@@ -9,112 +9,168 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- HTMX CDN -->
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script>
+        // Configure Tailwind darkMode strategy
+        tailwind.config = {
+            darkMode: 'class',
+        }
+
+        // Prevents theme flash on initial load
+        if (localStorage.getItem('pennywise_theme') === 'dark' || 
+        (!('pennywise_theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    </script>
 </head>
 
-<body class="bg-gray-50 font-sans text-gray-800 antialiased min-h-screen flex flex-col">
+<body class="bg-gray-50 dark:bg-gray-900 font-sans text-gray-800 dark:text-gray-100 antialiased min-h-screen flex flex-col md:flex-row transition-colors duration-200">
 
-    <!-- Top Navigation Menu Bar -->
-    <nav class="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-40">
-        <div class="max-w-5xl mx-auto px-4 md:px-6">
-            <div class="flex justify-between h-16 items-center">
-                
-                <!-- Logo/Brand Title -->
-                <div class="flex items-center gap-2">
-                    <span class="text-xl font-black text-blue-600 tracking-tight">Pennywise</span>
+    {% if user.is_authenticated %}
+    <!-- ========================================================================= -->
+    <!-- LEFT SIDEBAR NAVIGATION (Desktop)                                         -->
+    <!-- ========================================================================= -->
+    <aside id="sidebar" class="hidden md:flex flex-col bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 h-screen sticky top-0 transition-all duration-300 z-40 w-64 shrink-0">
+        
+        <!-- Sidebar Header (Logo + Toggle Button) -->
+        <div class="h-16 flex items-center justify-between px-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
+            <a href="{% url 'home' %}" class="flex items-center gap-2 overflow-hidden">
+                <span class="sidebar-text text-xl font-black text-blue-600 dark:text-blue-400 tracking-tight whitespace-nowrap">Pennywise</span>
+                <div class="sidebar-icon hidden w-9 h-9 rounded-xl bg-blue-600 dark:bg-blue-500 text-white font-black flex items-center justify-center text-lg shadow-sm shrink-0">
+                    P
                 </div>
+            </a>
+            <!-- Collapse/Expand Toggle Button -->
+            <button onclick="toggleSidebar()" title="Toggle Sidebar" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer">
+                <svg id="collapse-icon" class="w-5 h-5 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/>
+                </svg>
+            </button>
+        </div>
 
-                <!-- Navigation Links & User Authentication Status -->
-                <div class="hidden md:flex space-x-1 h-full items-center">
-                    {% if user.is_authenticated %}
-                    <a href="{% url 'home' %}" 
-                       class="px-3 py-2 rounded-lg text-sm font-medium transition {% if request.resolver_match.url_name == 'home' %}bg-blue-50 text-blue-600{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %}">
-                        Transactions
-                    </a>
-                    <a href="{% url 'income' %}" 
-                       class="px-3 py-2 rounded-lg text-sm font-medium transition {% if request.resolver_match.url_name == 'income' %}bg-blue-50 text-blue-600{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %}">
-                        Income
-                    </a>
-                    <a href="{% url 'analytics' %}" 
-                       class="px-3 py-2 rounded-lg text-sm font-medium transition {% if request.resolver_match.url_name == 'analytics' %}bg-blue-50 text-blue-600{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %}">
-                        Analytics
-                    </a>
-                    <a href="{% url 'settings' %}" 
-                       class="px-3 py-2 rounded-lg text-sm font-medium transition {% if request.resolver_match.url_name == 'settings' %}bg-blue-50 text-blue-600{% else %}text-gray-600 hover:bg-gray-50 hover:text-gray-900{% endif %}">
-                        Settings
-                    </a>
+        <!-- Navigation Links -->
+        <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+            <a href="{% url 'home' %}" 
+               class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition group {% if request.resolver_match.url_name == 'home' %}bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 font-semibold{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:text-gray-900 dark:hover:text-white{% endif %}">
+                <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                <span class="sidebar-text whitespace-nowrap">Transactions</span>
+            </a>
 
-                    <!-- User Account Badge & Logout Form -->
-                    <div class="flex items-center gap-3 pl-4 ml-2 border-l border-gray-200">
-                        <span class="text-xs font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">
-                            👤 {{ user.username }}
-                        </span>
-                        <form method="POST" action="{% url 'logout' %}" class="inline">
-                            {% csrf_token %}
-                            <button type="submit" 
-                                    class="text-xs text-red-600 hover:text-red-800 font-semibold px-2 py-1 rounded hover:bg-red-50 transition cursor-pointer">
-                                Logout
-                            </button>
-                        </form>
+            <a href="{% url 'income' %}" 
+               class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition group {% if request.resolver_match.url_name == 'income' %}bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 font-semibold{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:text-gray-900 dark:hover:text-white{% endif %}">
+                <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <span class="sidebar-text whitespace-nowrap">Income</span>
+            </a>
+
+            <a href="{% url 'analytics' %}" 
+               class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition group {% if request.resolver_match.url_name == 'analytics' %}bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 font-semibold{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:text-gray-900 dark:hover:text-white{% endif %}">
+                <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                <span class="sidebar-text whitespace-nowrap">Analytics</span>
+            </a>
+
+            <a href="{% url 'settings' %}" 
+               class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition group {% if request.resolver_match.url_name == 'settings' %}bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 font-semibold{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:text-gray-900 dark:hover:text-white{% endif %}">
+                <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                <span class="sidebar-text whitespace-nowrap">Settings</span>
+            </a>
+        </nav>
+
+        <!-- User Profile & Logout Section -->
+        <div class="p-3 border-t border-gray-100 dark:border-gray-700 shrink-0">
+            <div class="flex items-center justify-between p-2 rounded-xl bg-gray-50 dark:bg-gray-700/50 overflow-hidden">
+                <div class="flex items-center gap-2 overflow-hidden">
+                    <div class="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-300 font-bold flex items-center justify-center text-xs shrink-0" title="{{ user.username }}">
+                        {{ user.username|first|upper }}
                     </div>
-                    {% else %}
-                    <a href="{% url 'login' %}" 
-                       class="px-3 py-2 rounded-lg text-sm font-medium text-blue-600 hover:bg-blue-50 transition">
-                        Log In
-                    </a>
-                    <a href="{% url 'signup' %}" 
-                       class="px-3 py-2 rounded-lg text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white transition">
-                        Sign Up
-                    </a>
-                    {% endif %}
+                    <div class="sidebar-text truncate">
+                        <p class="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate">{{ user.username }}</p>
+                    </div>
                 </div>
-
-                <!-- Simple Mobile Menu Toggle Action -->
-                <div class="md:hidden">
-                    <button onclick="toggleMobileNavMenu()" class="text-gray-500 hover:text-gray-700 p-2 focus:outline-none">
-                        ☰
+                
+                <form method="POST" action="{% url 'logout' %}" class="inline shrink-0">
+                    {% csrf_token %}
+                    <button type="submit" title="Logout" class="text-gray-400 hover:text-red-600 dark:hover:text-red-400 p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/30 transition cursor-pointer">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
                     </button>
-                </div>
+                </form>
             </div>
         </div>
+    </aside>
 
-        <!-- Collapsible Dropdown Nav for Mobile Layout Panels -->
-        <div id="mobileNavMenu" class="hidden md:hidden border-t border-gray-100 bg-white px-4 py-3 space-y-1">
-            {% if user.is_authenticated %}
-            <div class="px-3 py-1.5 mb-2 text-xs font-semibold text-gray-500 bg-gray-50 rounded-md">
-                Signed in as: <strong class="text-gray-800">{{ user.username }}</strong>
-            </div>
-            <a href="{% url 'home' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">Transactions</a>
-            <a href="{% url 'income' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">Income</a>
-            <a href="{% url 'analytics' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">Analytics</a>
-            <a href="{% url 'settings' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">Settings</a>
-            <form method="POST" action="{% url 'logout' %}" class="pt-2 border-t border-gray-100">
-                {% csrf_token %}
-                <button type="submit" class="w-full text-left px-3 py-2 text-base font-semibold text-red-600 hover:bg-red-50 rounded-md">
-                    Logout
-                </button>
-            </form>
-            {% else %}
-            <a href="{% url 'login' %}" class="block px-3 py-2 rounded-md text-base font-medium text-blue-600 hover:bg-blue-50">Log In</a>
-            <a href="{% url 'signup' %}" class="block px-3 py-2 rounded-md text-base font-medium text-blue-600 hover:bg-blue-50">Sign Up</a>
-            {% endif %}
-        </div>
-    </nav>
+    <!-- ========================================================================= -->
+    <!-- MOBILE HEADER (Mobile only)                                              -->
+    <!-- ========================================================================= -->
+    <header class="md:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40 px-4 py-3 flex justify-between items-center">
+        <span class="text-xl font-black text-blue-600 dark:text-blue-400 tracking-tight">Pennywise</span>
+        <button onclick="toggleMobileNavMenu()" class="text-gray-600 dark:text-gray-300 p-2 focus:outline-none">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+    </header>
 
-    <!-- Main Dynamic Content Wrapper -->
-    <main class="max-w-5xl w-full mx-auto p-6 md:p-10 flex-grow">
-        {% block content %}
-        <!-- Child pages will swap their unique structures in here! -->
-        {% endblock %}
+    <!-- Mobile Dropdown Navigation -->
+    <div id="mobileNavMenu" class="hidden md:hidden fixed inset-x-0 top-[57px] bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-lg z-30 p-4 space-y-2">
+        <a href="{% url 'home' %}" class="block px-3 py-2 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">Transactions</a>
+        <a href="{% url 'income' %}" class="block px-3 py-2 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">Income</a>
+        <a href="{% url 'analytics' %}" class="block px-3 py-2 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">Analytics</a>
+        <a href="{% url 'settings' %}" class="block px-3 py-2 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">Settings</a>
+        <form method="POST" action="{% url 'logout' %}" class="pt-2 border-t border-gray-100 dark:border-gray-700">
+            {% csrf_token %}
+            <button type="submit" class="w-full text-left px-3 py-2 text-sm font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg">
+                Logout ({{ user.username }})
+            </button>
+        </form>
+    </div>
+    {% endif %}
+
+    <!-- ========================================================================= -->
+    <!-- MAIN CONTENT AREA                                                         -->
+    <!-- ========================================================================= -->
+    <main class="flex-1 w-full p-6 md:p-8 max-w-7xl mx-auto">
+        {% block content %}{% endblock %}
     </main>
 
-    <!-- Script for tracking mobile menu collapses -->
+    <!-- Sidebar Collapse State Script -->
     <script>
         function toggleMobileNavMenu() {
             document.getElementById('mobileNavMenu').classList.toggle('hidden');
         }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const icon = document.getElementById('collapse-icon');
+            const textElements = document.querySelectorAll('.sidebar-text');
+            const iconElements = document.querySelectorAll('.sidebar-icon');
+            
+            sidebar.classList.toggle('w-64');
+            sidebar.classList.toggle('w-20');
+            icon.classList.toggle('rotate-180');
+
+            textElements.forEach(el => el.classList.toggle('hidden'));
+            iconElements.forEach(el => el.classList.toggle('hidden'));
+
+            const isCollapsed = sidebar.classList.contains('w-20');
+            localStorage.setItem('pennywise_sidebar_collapsed', isCollapsed ? 'true' : 'false');
+        }
+
+        document.addEventListener("DOMContentLoaded", function() {
+            if (localStorage.getItem('pennywise_sidebar_collapsed') === 'true') {
+                const sidebar = document.getElementById('sidebar');
+                const icon = document.getElementById('collapse-icon');
+                const textElements = document.querySelectorAll('.sidebar-text');
+                const iconElements = document.querySelectorAll('.sidebar-icon');
+
+                if (sidebar) {
+                    sidebar.classList.remove('w-64');
+                    sidebar.classList.add('w-20');
+                    if (icon) icon.classList.add('rotate-180');
+                    textElements.forEach(el => el.classList.add('hidden'));
+                    iconElements.forEach(el => el.classList.remove('hidden'));
+                }
+            }
+        });
     </script>
     
-    <!-- Load child scripts conditionally -->
     {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -121,6 +121,74 @@ def validate_and_parse_rbc_csv(csv_file, user):
 
     return candidate_rows
 
+def validate_and_parse_td_csv(csv_file, user):
+    """
+    Validates TD CSV exports (no headers) and extracts candidate transactions.
+    - Column A (index 0): Date (Format M/D/YYYY)
+    - Column B (index 1): Description / Transaction Type
+    - Column C (index 2): Amount (Outflow / Expense)
+    Filters out 'PAYMENT - THANK YOU' rows and duplicate entries.
+    """
+    if not csv_file or not csv_file.name.lower().endswith('.csv'):
+        raise ValueError("The uploaded file must be a .csv file.")
+
+    # Use 'utf-8-sig' to automatically handle UTF-8 Byte Order Marks (BOM)
+    decoded_file = csv_file.read().decode('utf-8-sig').splitlines()
+    reader = csv.reader(decoded_file)
+
+    # Fetch existing transactions for duplicate detection
+    exact_matches, date_amount_matches = get_user_transaction_lookup_sets(user)
+    candidate_rows = []
+
+    for idx, row in enumerate(reader):
+        # Ignore empty rows or rows that don't have at least Date, Description, and Amount
+        if not row or len(row) < 3:
+            continue
+
+        raw_date = row[0].strip()
+        description = row[1].strip()
+        raw_amount = row[2].strip()
+
+        if not raw_date or not description:
+            continue
+
+        # Filter out credit card payments
+        desc_lower = description.lower()
+        if 'payment - thank you' in desc_lower or 'paiement - merci' in desc_lower:
+            continue
+
+        # If Column C is empty (e.g. for payments or credits logged in Column D), skip row
+        if not raw_amount:
+            continue
+
+        try:
+            # TD uses M/D/YYYY date format (e.g. 7/24/2026)
+            tx_date = datetime.datetime.strptime(raw_date, '%m/%d/%Y').date()
+            amount = abs(Decimal(raw_amount))
+            if amount == 0:
+                continue
+        except (ValueError, InvalidOperation):
+            continue
+
+        # Shared duplicate detection logic
+        status, is_duplicate, selected = check_duplicate_status(
+            tx_date, amount, description, exact_matches, date_amount_matches
+        )
+
+        candidate_rows.append({
+            'index': idx,
+            'date': tx_date.strftime('%Y-%m-%d'),
+            'description': description,
+            'amount': f"{amount:.2f}",
+            'status': status,
+            'is_duplicate': is_duplicate,
+            'selected': selected
+        })
+
+    if not candidate_rows:
+        raise ValueError("No valid expense transactions were found in the uploaded TD CSV file.")
+
+    return candidate_rows
 
 def validate_and_parse_wealthsimple_csv(csv_file, user):
     """Validates Wealthsimple CSVs and extracts candidate transactions."""

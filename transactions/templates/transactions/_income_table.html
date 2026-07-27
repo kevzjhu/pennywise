@@ -1,13 +1,13 @@
-<div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-visible">
+<div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-visible">
     <!-- Top Bar: Title or Bulk Actions -->
-    <div class="p-5 border-b border-gray-100 flex justify-between items-center min-h-[68px]">
+    <div class="p-5 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center min-h-[68px]">
         
         <!-- Standard Header Title -->
         <div id="default-header" class="flex justify-between items-center w-full">
-            <h2 class="text-lg font-bold text-gray-800">Income History</h2>
+            <h2 class="text-lg font-bold text-gray-800 dark:text-white">Income History</h2>
             {% if current_filters.search or current_filters.start_date or current_filters.end_date or current_filters.min_amount or current_filters.max_amount %}
             <button hx-get="{% url 'income' %}" hx-target="#income-table-container" hx-push-url="false"
-                class="text-xs font-medium text-gray-500 hover:text-red-600 transition bg-gray-100 px-2.5 py-1 rounded-md cursor-pointer">
+                class="text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition bg-gray-100 dark:bg-gray-700 px-2.5 py-1 rounded-md cursor-pointer">
                 Clear Active Filters ✕
             </button>
             {% endif %}
@@ -15,8 +15,8 @@
 
         <!-- Bulk Actions Bar -->
         <div id="bulk-header" class="hidden flex items-center justify-between w-full">
-            <span class="text-xs font-semibold text-gray-600">
-                <span id="selected-count" class="text-blue-600 font-bold">0</span> items selected
+            <span class="text-xs font-semibold text-gray-600 dark:text-gray-300">
+                <span id="selected-count" class="text-blue-600 dark:text-blue-400 font-bold">0</span> items selected
             </span>
             <form hx-post="{% url 'income' %}" 
                   hx-target="#income-table-container" 
@@ -26,7 +26,7 @@
                 <input type="hidden" name="action_type" value="bulk_delete">
                 <div id="bulk-ids-container"></div>
                 <button type="submit" 
-                    class="bg-red-50 hover:bg-red-100 text-red-600 font-medium text-xs px-3 py-1.5 rounded-lg border border-red-200 transition cursor-pointer">
+                    class="bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 font-medium text-xs px-3 py-1.5 rounded-lg border border-red-200 dark:border-red-800 transition cursor-pointer">
                     🗑️ Delete Selected
                 </button>
             </form>
@@ -36,12 +36,12 @@
     <div class="overflow-x-auto min-h-[350px] w-full">
         <table class="w-full text-left border-collapse">
             <thead>
-                <tr class="bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500 uppercase tracking-wider select-none">
+                <tr class="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700 text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider select-none">
                     
                     <!-- MASTER CHECKBOX COLUMN -->
                     <th class="py-3 px-4 w-10">
                         <input type="checkbox" id="select-all-paychecks" onclick="toggleSelectAll(this)" 
-                            class="rounded border-gray-300 text-blue-600 focus:ring-0 cursor-pointer">
+                            class="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-0 cursor-pointer">
                     </th>
 
                     <!-- 1. DATE HEADER -->
@@ -50,15 +50,15 @@
                             <div class="flex items-center justify-between gap-1">
                                 <span hx-get="?sort_by=date&direction={{ current_filters.next_direction }}&search={{ current_filters.search }}&start_date={{ current_filters.start_date }}&end_date={{ current_filters.end_date }}&min_amount={{ current_filters.min_amount }}&max_amount={{ current_filters.max_amount }}"
                                       hx-target="#income-table-container" hx-push-url="false"
-                                      class="hover:text-gray-900 cursor-pointer flex-grow py-1">
+                                      class="hover:text-gray-900 dark:hover:text-white cursor-pointer flex-grow py-1">
                                     Date {% if current_filters.sort_by == 'date' %}{% if current_filters.direction == 'asc' %}▲{% else %}▼{% endif %}{% endif %}
                                 </span>
-                                <button onclick="toggleExcelDropdown(event, 'incomeDateMenu')" class="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-700 focus:outline-none cursor-pointer">
+                                <button onclick="toggleExcelDropdown(event, 'incomeDateMenu')" class="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-gray-400 dark:text-gray-300 hover:text-gray-700 dark:hover:text-white focus:outline-none cursor-pointer">
                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
                                 </button>
                             </div>
 
-                            <div id="incomeDateMenu" class="income-filter-menu hidden absolute left-0 top-full mt-2 w-60 bg-white border border-gray-200 rounded-xl shadow-xl p-3.5 normal-case tracking-normal font-normal text-gray-700 space-y-3 z-50">
+                            <div id="incomeDateMenu" class="income-filter-menu hidden absolute left-0 top-full mt-2 w-60 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-3.5 normal-case tracking-normal font-normal text-gray-700 dark:text-gray-200 space-y-3 z-50">
                                 <form hx-get="{% url 'income' %}" hx-target="#income-table-container" hx-push-url="false" class="space-y-2">
                                     <input type="hidden" name="sort_by" value="{{ current_filters.sort_by }}">
                                     <input type="hidden" name="direction" value="{{ current_filters.direction }}">
@@ -66,12 +66,12 @@
                                     <input type="hidden" name="min_amount" value="{{ current_filters.min_amount }}">
                                     <input type="hidden" name="max_amount" value="{{ current_filters.max_amount }}">
                                     <div>
-                                        <label class="block text-[10px] uppercase font-bold text-gray-400 mb-0.5">From</label>
-                                        <input type="date" name="start_date" value="{{ current_filters.start_date }}" class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                        <label class="block text-[10px] uppercase font-bold text-gray-400 dark:text-gray-400 mb-0.5">From</label>
+                                        <input type="date" name="start_date" value="{{ current_filters.start_date }}" class="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500">
                                     </div>
                                     <div>
-                                        <label class="block text-[10px] uppercase font-bold text-gray-400 mb-0.5">To</label>
-                                        <input type="date" name="end_date" value="{{ current_filters.end_date }}" class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                        <label class="block text-[10px] uppercase font-bold text-gray-400 dark:text-gray-400 mb-0.5">To</label>
+                                        <input type="date" name="end_date" value="{{ current_filters.end_date }}" class="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500">
                                     </div>
                                     <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs py-1.5 rounded font-medium transition cursor-pointer">Apply Filter</button>
                                 </form>
@@ -85,15 +85,15 @@
                             <div class="flex items-center justify-between gap-1">
                                 <span hx-get="?sort_by=source_name&direction={{ current_filters.next_direction }}&search={{ current_filters.search }}&start_date={{ current_filters.start_date }}&end_date={{ current_filters.end_date }}&min_amount={{ current_filters.min_amount }}&max_amount={{ current_filters.max_amount }}"
                                       hx-target="#income-table-container" hx-push-url="false"
-                                      class="hover:text-gray-900 cursor-pointer flex-grow py-1">
+                                      class="hover:text-gray-900 dark:hover:text-white cursor-pointer flex-grow py-1">
                                     Source {% if current_filters.sort_by == 'source_name' %}{% if current_filters.direction == 'asc' %}▲{% else %}▼{% endif %}{% endif %}
                                 </span>
-                                <button onclick="toggleExcelDropdown(event, 'incomeSourceMenu')" class="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-700 focus:outline-none cursor-pointer">
+                                <button onclick="toggleExcelDropdown(event, 'incomeSourceMenu')" class="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-gray-400 dark:text-gray-300 hover:text-gray-700 dark:hover:text-white focus:outline-none cursor-pointer">
                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
                                 </button>
                             </div>
 
-                            <div id="incomeSourceMenu" class="income-filter-menu hidden absolute left-0 top-full mt-2 w-56 bg-white border border-gray-200 rounded-xl shadow-xl p-3.5 normal-case tracking-normal font-normal text-gray-700 z-50">
+                            <div id="incomeSourceMenu" class="income-filter-menu hidden absolute left-0 top-full mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-3.5 normal-case tracking-normal font-normal text-gray-700 dark:text-gray-200 z-50">
                                 <form hx-get="{% url 'income' %}" hx-target="#income-table-container" hx-push-url="false" class="space-y-2">
                                     <input type="hidden" name="sort_by" value="{{ current_filters.sort_by }}">
                                     <input type="hidden" name="direction" value="{{ current_filters.direction }}">
@@ -101,7 +101,7 @@
                                     <input type="hidden" name="end_date" value="{{ current_filters.end_date }}">
                                     <input type="hidden" name="min_amount" value="{{ current_filters.min_amount }}">
                                     <input type="hidden" name="max_amount" value="{{ current_filters.max_amount }}">
-                                    <input type="text" name="search" value="{{ current_filters.search }}" placeholder="Search source name..." class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                    <input type="text" name="search" value="{{ current_filters.search }}" placeholder="Search source name..." class="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500">
                                     <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs py-1.5 rounded font-medium transition cursor-pointer">Apply Filter</button>
                                 </form>
                             </div>
@@ -114,15 +114,15 @@
                             <div class="flex items-center justify-end gap-1">
                                 <span hx-get="?sort_by=amount&direction={{ current_filters.next_direction }}&search={{ current_filters.search }}&start_date={{ current_filters.start_date }}&end_date={{ current_filters.end_date }}&min_amount={{ current_filters.min_amount }}&max_amount={{ current_filters.max_amount }}"
                                       hx-target="#income-table-container" hx-push-url="false"
-                                      class="hover:text-gray-900 cursor-pointer flex-grow py-1 text-right">
+                                      class="hover:text-gray-900 dark:hover:text-white cursor-pointer flex-grow py-1 text-right">
                                     Amount {% if current_filters.sort_by == 'amount' %}{% if current_filters.direction == 'asc' %}▲{% else %}▼{% endif %}{% endif %}
                                 </span>
-                                <button onclick="toggleExcelDropdown(event, 'incomeAmtMenu')" class="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-700 focus:outline-none cursor-pointer">
+                                <button onclick="toggleExcelDropdown(event, 'incomeAmtMenu')" class="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-gray-400 dark:text-gray-300 hover:text-gray-700 dark:hover:text-white focus:outline-none cursor-pointer">
                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
                                 </button>
                             </div>
 
-                            <div id="incomeAmtMenu" class="income-filter-menu hidden absolute right-0 top-full mt-2 w-60 bg-white border border-gray-200 rounded-xl shadow-xl p-3.5 normal-case tracking-normal font-normal text-left text-gray-700 z-50">
+                            <div id="incomeAmtMenu" class="income-filter-menu hidden absolute right-0 top-full mt-2 w-60 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-3.5 normal-case tracking-normal font-normal text-left text-gray-700 dark:text-gray-200 z-50">
                                 <form hx-get="{% url 'income' %}" hx-target="#income-table-container" hx-push-url="false" class="space-y-3">
                                     <input type="hidden" name="sort_by" value="{{ current_filters.sort_by }}">
                                     <input type="hidden" name="direction" value="{{ current_filters.direction }}">
@@ -131,13 +131,13 @@
                                     <input type="hidden" name="end_date" value="{{ current_filters.end_date }}">
 
                                     <div>
-                                        <label class="block text-[10px] uppercase font-bold text-gray-400 mb-0.5">Min Amount ($)</label>
-                                        <input type="number" step="0.01" name="min_amount" value="{{ current_filters.min_amount }}" placeholder="0.00" class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                        <label class="block text-[10px] uppercase font-bold text-gray-400 dark:text-gray-400 mb-0.5">Min Amount ($)</label>
+                                        <input type="number" step="0.01" name="min_amount" value="{{ current_filters.min_amount }}" placeholder="0.00" class="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500">
                                     </div>
 
                                     <div>
-                                        <label class="block text-[10px] uppercase font-bold text-gray-400 mb-0.5">Max Amount ($)</label>
-                                        <input type="number" step="0.01" name="max_amount" value="{{ current_filters.max_amount }}" placeholder="0.00" class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                        <label class="block text-[10px] uppercase font-bold text-gray-400 dark:text-gray-400 mb-0.5">Max Amount ($)</label>
+                                        <input type="number" step="0.01" name="max_amount" value="{{ current_filters.max_amount }}" placeholder="0.00" class="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500">
                                     </div>
 
                                     <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs py-1.5 rounded font-medium transition cursor-pointer">Apply Filter</button>
@@ -145,24 +145,24 @@
                             </div>
                         </div>
                     </th>
-                    <th class="py-3 px-4 text-center text-gray-500 min-w-[130px]">Actions</th>
+                    <th class="py-3 px-4 text-center text-gray-500 dark:text-gray-400 min-w-[130px]">Actions</th>
                 </tr>
             </thead>
-            <tbody class="divide-y divide-gray-100 text-sm">
+            <tbody class="divide-y divide-gray-100 dark:divide-gray-700 text-sm">
                 {% for paycheck in paychecks %}
-                <tr class="hover:bg-gray-50/50 transition paycheck-row">
+                <tr class="hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition paycheck-row">
                     <td class="py-3.5 px-4">
                         <input type="checkbox" value="{{ paycheck.id }}" onclick="updateSelectionUI()"
-                            class="paycheck-checkbox rounded border-gray-300 text-blue-600 focus:ring-0 cursor-pointer">
+                            class="paycheck-checkbox rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-0 cursor-pointer">
                     </td>
-                    <td class="py-3.5 px-4 text-gray-600">{{ paycheck.date|date:"Y-m-d" }}</td>
+                    <td class="py-3.5 px-4 text-gray-600 dark:text-gray-300 font-medium">{{ paycheck.date|date:"Y-m-d" }}</td>
                     <td class="py-3.5 px-4 max-w-xs">
-                        <div class="font-medium text-gray-900">{{ paycheck.source_name }}</div>
+                        <div class="font-medium text-gray-900 dark:text-white">{{ paycheck.source_name }}</div>
                         {% if paycheck.template %}
-                        <span class="inline-block px-1.5 py-0.5 text-[10px] font-semibold bg-blue-50 text-blue-600 rounded mt-0.5">Auto-generated</span>
+                        <span class="inline-block px-1.5 py-0.5 text-[10px] font-semibold bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 rounded mt-0.5">Auto-generated</span>
                         {% endif %}
                     </td>
-                    <td class="py-3.5 px-4 text-right font-semibold text-emerald-600">
+                    <td class="py-3.5 px-4 text-right font-semibold text-emerald-600 dark:text-emerald-400">
                         +${{ paycheck.amount }}
                     </td>
                     <td class="py-3.5 px-4 text-center">
@@ -173,7 +173,7 @@
                                     source_name: '{{ paycheck.source_name|escapejs }}',
                                     amount: '{{ paycheck.amount }}'
                                 })"
-                                class="text-blue-600 hover:text-blue-800 font-medium text-xs px-2.5 py-1 rounded bg-blue-50 hover:bg-blue-100 transition cursor-pointer">
+                                class="text-blue-600 dark:text-blue-400 hover:text-blue-800 font-medium text-xs px-2.5 py-1 rounded bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 transition cursor-pointer">
                                 Edit
                             </button>
 
@@ -186,7 +186,7 @@
                                 <input type="hidden" name="action_type" value="single_delete">
                                 <input type="hidden" name="delete_id" value="{{ paycheck.id }}">
                                 <button type="submit" 
-                                    class="text-red-600 hover:text-red-800 font-medium text-xs px-2.5 py-1 rounded bg-red-50 hover:bg-red-100 transition cursor-pointer">
+                                    class="text-red-600 dark:text-red-400 hover:text-red-800 font-medium text-xs px-2.5 py-1 rounded bg-red-50 dark:bg-red-900/30 hover:bg-red-100 transition cursor-pointer">
                                     Delete
                                 </button>
                             </form>
@@ -195,45 +195,45 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="5" class="py-8 text-center text-gray-400">No income entries match your selection.</td>
+                    <td colspan="5" class="py-8 text-center text-gray-400 dark:text-gray-500">No income entries match your selection.</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 
-    <!-- 💡 PAGINATION FOOTER CONTROL BAR -->
+    <!-- PAGINATION FOOTER CONTROL BAR -->
     {% if paychecks.paginator.num_pages > 1 %}
-    <div class="px-5 py-3 border-t border-gray-100 flex items-center justify-between bg-gray-50/50 rounded-b-xl text-xs text-gray-600 select-none">
+    <div class="px-5 py-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800 rounded-b-xl text-xs text-gray-600 dark:text-gray-300 select-none">
         <div>
-            Showing <span class="font-semibold text-gray-900">{{ paychecks.start_index }}</span> to <span class="font-semibold text-gray-900">{{ paychecks.end_index }}</span> of <span class="font-semibold text-gray-900">{{ paychecks.paginator.count }}</span> items
+            Showing <span class="font-semibold text-gray-900 dark:text-white">{{ paychecks.start_index }}</span> to <span class="font-semibold text-gray-900 dark:text-white">{{ paychecks.end_index }}</span> of <span class="font-semibold text-gray-900 dark:text-white">{{ paychecks.paginator.count }}</span> items
         </div>
 
         <div class="flex items-center gap-1">
             {% if paychecks.has_previous %}
             <button hx-get="?page={{ paychecks.previous_page_number }}&sort_by={{ current_filters.sort_by }}&direction={{ current_filters.direction }}&search={{ current_filters.search }}&start_date={{ current_filters.start_date }}&end_date={{ current_filters.end_date }}&min_amount={{ current_filters.min_amount }}&max_amount={{ current_filters.max_amount }}"
                     hx-target="#income-table-container" hx-push-url="false"
-                    class="px-2.5 py-1 rounded border border-gray-300 bg-white hover:bg-gray-100 text-gray-700 font-medium transition cursor-pointer">
+                    class="px-2.5 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium transition cursor-pointer">
                 ← Previous
             </button>
             {% else %}
-            <span class="px-2.5 py-1 rounded border border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed">
+            <span class="px-2.5 py-1 rounded border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed">
                 ← Previous
             </span>
             {% endif %}
 
-            <span class="px-3 font-semibold text-gray-700">
+            <span class="px-3 font-semibold text-gray-700 dark:text-gray-300">
                 Page {{ paychecks.number }} of {{ paychecks.paginator.num_pages }}
             </span>
 
             {% if paychecks.has_next %}
             <button hx-get="?page={{ paychecks.next_page_number }}&sort_by={{ current_filters.sort_by }}&direction={{ current_filters.direction }}&search={{ current_filters.search }}&start_date={{ current_filters.start_date }}&end_date={{ current_filters.end_date }}&min_amount={{ current_filters.min_amount }}&max_amount={{ current_filters.max_amount }}"
                     hx-target="#income-table-container" hx-push-url="false"
-                    class="px-2.5 py-1 rounded border border-gray-300 bg-white hover:bg-gray-100 text-gray-700 font-medium transition cursor-pointer">
+                    class="px-2.5 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium transition cursor-pointer">
                 Next →
             </button>
             {% else %}
-            <span class="px-2.5 py-1 rounded border border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed">
+            <span class="px-2.5 py-1 rounded border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed">
                 Next →
             </span>
             {% endif %}
@@ -259,7 +259,6 @@
         }
     }
 
-    // Close open menus when clicking anywhere outside
     document.addEventListener('click', function(e) {
         if (!e.target.closest('.income-filter-menu') && !e.target.closest('button[onclick*="toggleExcelDropdown"]')) {
             document.querySelectorAll('.income-filter-menu').forEach(menu => menu.classList.add('hidden'));

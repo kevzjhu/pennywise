@@ -11,7 +11,7 @@ from django.db.models.functions import Coalesce, ExtractYear, ExtractMonth
 from decimal import Decimal, InvalidOperation
 import calendar
 import datetime
-from .services import validate_and_parse_wealthsimple_csv, validate_and_parse_rbc_csv
+from .services import validate_and_parse_wealthsimple_csv, validate_and_parse_rbc_csv, validate_and_parse_td_csv
 
 def get_home_context(request):
     """Helper to build and return the standard context dictionary for home.html."""
@@ -91,6 +91,8 @@ def home(request):
                     candidate_rows = validate_and_parse_wealthsimple_csv(csv_file, request.user)
                 elif bank == 'rbc':
                     candidate_rows = validate_and_parse_rbc_csv(csv_file, request.user)
+                elif bank == "td":
+                    candidate_rows = validate_and_parse_td_csv(csv_file, request.user)
                 else:
                     raise ValueError(f"CSV parsing for '{bank.upper()}' is not supported yet.")
 
