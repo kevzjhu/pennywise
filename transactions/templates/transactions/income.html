@@ -48,6 +48,11 @@
                     <br>Ends: <em>Indefinite</em>
                     {% endif %}
                 </p>
+                {% if template.notes %}
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 italic border-t border-gray-100 dark:border-gray-700 pt-1">
+                {{ template.notes }}
+                </p>
+                {% endif %}
             </div>
             
             <div class="flex items-center gap-1">
@@ -58,7 +63,8 @@
                         amount: '{{ template.amount }}',
                         frequency: '{{ template.frequency }}',
                         start_date: '{{ template.start_date|date:"Y-m-d" }}',
-                        end_date: '{{ template.end_date|date:"Y-m-d"|default:"" }}'
+                        end_date: '{{ template.end_date|date:"Y-m-d"|default:"" }}',
+                        notes: '{{ template.notes|default:""|escapejs }}'
                     })"
                     class="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 font-medium px-2 py-1 rounded bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 transition cursor-pointer">
                     Edit
@@ -111,6 +117,10 @@
                     <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Amount ($)</label>
                     <input type="number" step="0.01" name="amount" id="paycheck_amount" required placeholder="0.00" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
                 </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Notes (Optional)</label>
+                    <textarea name="notes" id="paycheck_notes" rows="3" maxlength="200" placeholder="Enter paycheck notes..." class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"></textarea>
+                </div>
             </div>
             <div class="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
                 <button type="button" onclick="closePaycheckModal()" class="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer">Cancel</button>
@@ -161,6 +171,10 @@
                 <p class="text-xs text-gray-500 dark:text-gray-300 bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg border border-blue-100 dark:border-blue-800">
                     💡 If End Date is left blank, the rule runs indefinitely into the future.
                 </p>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Default Notes (Optional)</label>
+                    <textarea name="notes" id="rule_notes" rows="3" maxlength="200" placeholder="Enter default notes for auto-generated paychecks..." class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"></textarea>
+                </div>
             </div>
             <div class="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
                 <button type="button" onclick="closeRecurringModal()" class="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer">Cancel</button>
@@ -181,6 +195,7 @@
         const dateInput = document.getElementById('paycheck_date');
         const sourceInput = document.getElementById('paycheck_source_name');
         const amountInput = document.getElementById('paycheck_amount');
+        const notesInput = document.getElementById('paycheck_notes');
 
         if (mode === 'edit') {
             title.textContent = 'Edit Paycheck';
@@ -188,12 +203,14 @@
             dateInput.value = data.date;
             sourceInput.value = data.source_name;
             amountInput.value = data.amount;
+            if (notesInput) notesInput.value = data.notes || '';
         } else {
             title.textContent = 'Log Paycheck';
             paycheckId.value = '';
             dateInput.value = new Date().toISOString().split('T')[0];
             sourceInput.value = '';
             amountInput.value = '';
+            if (notesInput) notesInput.value = '';
         }
         modal.classList.remove('hidden');
     }
@@ -212,6 +229,7 @@
         const frequencyInput = document.getElementById('rule_frequency');
         const startDateInput = document.getElementById('rule_start_date');
         const endDateInput = document.getElementById('rule_end_date');
+        const notesInput = document.getElementById('rule_notes');
 
         if (mode === 'edit') {
             title.textContent = 'Edit Recurring Rule';
@@ -221,6 +239,7 @@
             frequencyInput.value = data.frequency;
             startDateInput.value = data.start_date;
             endDateInput.value = data.end_date || '';
+            if (notesInput) notesInput.value = data.notes || '';
         } else {
             title.textContent = 'New Recurring Rule';
             ruleId.value = '';
@@ -229,6 +248,7 @@
             frequencyInput.value = 'BI_WEEKLY';
             startDateInput.value = new Date().toISOString().split('T')[0];
             endDateInput.value = '';
+            if (notesInput) notesInput.value = '';
         }
         modal.classList.remove('hidden');
     }

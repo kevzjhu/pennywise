@@ -158,6 +158,9 @@
                     <td class="py-3.5 px-4 text-gray-600 dark:text-gray-300 font-medium">{{ paycheck.date|date:"Y-m-d" }}</td>
                     <td class="py-3.5 px-4 max-w-xs">
                         <div class="font-medium text-gray-900 dark:text-white">{{ paycheck.source_name }}</div>
+                        {% if paycheck.notes %}
+                        <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5 italic truncate" title="{{ paycheck.notes }}">{{ paycheck.notes }}</div>
+                        {% endif %}
                         {% if paycheck.template %}
                         <span class="inline-block px-1.5 py-0.5 text-[10px] font-semibold bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 rounded mt-0.5">Auto-generated</span>
                         {% endif %}
@@ -171,7 +174,8 @@
                                     id: '{{ paycheck.id }}',
                                     date: '{{ paycheck.date|date:"Y-m-d" }}',
                                     source_name: '{{ paycheck.source_name|escapejs }}',
-                                    amount: '{{ paycheck.amount }}'
+                                    amount: '{{ paycheck.amount }}',
+                                    notes: '{{ paycheck.notes|default:""|escapejs }}'
                                 })"
                                 class="text-blue-600 dark:text-blue-400 hover:text-blue-800 font-medium text-xs px-2.5 py-1 rounded bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 transition cursor-pointer">
                                 Edit

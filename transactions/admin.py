@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.models import User
-from .models import Transaction, PaycheckTemplate, PaycheckTransaction, Category
+from .models import Transaction, RecurringTransactionTemplate, PaycheckTemplate, PaycheckTransaction, Category
 from import_export import resources, fields
 from import_export.widgets import ForeignKeyWidget, DateWidget, DecimalWidget
 from import_export.admin import ImportExportModelAdmin
@@ -112,6 +112,11 @@ class TransactionAdmin(ImportExportModelAdmin):
     list_filter = ('category', 'date', 'user')
     search_fields = ('description', 'notes')
 
+@admin.register(RecurringTransactionTemplate)
+class RecurringTransactionTemplateAdmin(admin.ModelAdmin):
+    list_display = ('description', 'amount', 'category', 'frequency', 'start_date', 'end_date', 'user')
+    list_filter = ('frequency', 'user')
+    search_fields = ('description', 'notes')
 
 @admin.register(PaycheckTransaction)
 class PaycheckTransactionAdmin(ImportExportModelAdmin):  # 👈 Enabled Import/Export for Income
@@ -132,3 +137,4 @@ class CategoryAdmin(admin.ModelAdmin):
     list_display = ('name', 'user', 'monthly_budget')
     list_filter = ('user',)
     search_fields = ('name',)
+

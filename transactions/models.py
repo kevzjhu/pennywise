@@ -156,6 +156,7 @@ class PaycheckTemplate(models.Model):
     frequency = models.CharField(max_length=20, choices=FREQUENCY_CHOICES)
     start_date = models.DateField()
     end_date = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     skipped_dates = models.JSONField(default=list, blank=True)
 
@@ -186,6 +187,7 @@ class PaycheckTemplate(models.Model):
                         template=self,
                         source_name=self.source_name,
                         amount=self.amount,
+                        notes = self.notes,
                         date=current_pay_date
                     )
                 )
@@ -227,6 +229,7 @@ class PaycheckTemplate(models.Model):
                         template=self,
                         source_name=self.source_name,
                         amount=self.amount,
+                        notes = self.notes,
                         date=current_pay_date
                     )
                 )
@@ -241,6 +244,7 @@ class PaycheckTransaction(models.Model):
     source_name = models.CharField(max_length=100)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     date = models.DateField(db_index=True)
+    notes = models.TextField(blank=True, null=True)
     
     class Meta:
         ordering = ['-date']
