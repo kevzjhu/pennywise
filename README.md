@@ -92,6 +92,9 @@ python manage.py runserver
 ---
 ## 📝 To Do List:
 - Transactions: Add import functionality for CC transactions (CSVs)
+  - Done: WS, RBC, TD
+  - To do: Pennywise exports, CIBC, Scotiabank, Simplii, Amex, BMO
+- Add settings page (under user profile) - put dark mode, export data. Change current settings to "budget config" owtte
 - Analytics: Sankey? ML? Time-series analyses? open to suggestions
 - Deploy and UAT with friends
 - Mobile app
