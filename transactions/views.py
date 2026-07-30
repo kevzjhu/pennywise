@@ -1,16 +1,19 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.forms import UserCreationForm, PasswordChangeForm
 from django.contrib.auth.models import User
-from django.contrib.auth import login
-from .forms import TransactionForm, PaycheckTransactionForm, PaycheckTemplateForm, RecurringTransactionTemplateForm
-from .models import Transaction, PaycheckTransaction, PaycheckTemplate, Category, CategoryBudget, RecurringTransactionTemplate
+from django.contrib.auth import login, update_session_auth_hash
+from django.contrib import messages
+from django.http import HttpResponse
+from .forms import TransactionForm, PaycheckTransactionForm, PaycheckTemplateForm, RecurringTransactionTemplateForm, ProfileForm
+from .models import Transaction, PaycheckTransaction, PaycheckTemplate, Category, CategoryBudget, RecurringTransactionTemplate, Profile
 from django.db.models import Sum, Q, Value, DecimalField
 from django.db.models.functions import Coalesce, ExtractYear, ExtractMonth
 from decimal import Decimal, InvalidOperation
 import calendar
 import datetime
+import csv
 from .services import validate_and_parse_wealthsimple_csv, validate_and_parse_rbc_csv, validate_and_parse_td_csv
 
 def get_home_context(request):
@@ -622,7 +625,8 @@ def analytics(request):
     return render(request, "transactions/analytics.html", context)
 
 @login_required
-def settings(request):
+def budgets(request):
+    """View to handle Category creation, editing, and deletion for Budgets."""
     if request.method == "POST":
         action = request.POST.get('action')
         today = datetime.date.today()
@@ -646,7 +650,6 @@ def settings(request):
                     cat.monthly_budget = monthly_budget
                     cat.save()
 
-                # Log effective date record
                 CategoryBudget.objects.create(
                     category=cat,
                     effective_start_date=today,
@@ -667,10 +670,9 @@ def settings(request):
                 except InvalidOperation:
                     monthly_budget = Decimal('0.00')
                 
-                cat.monthly_budget = monthly_budget  # Updates current baseline
+                cat.monthly_budget = monthly_budget
                 cat.save()
 
-                # Safely handle edits made on the exact same day
                 todays_record = CategoryBudget.objects.filter(
                     category=cat, 
                     effective_start_date=today
@@ -684,6 +686,7 @@ def settings(request):
                         effective_start_date=today,
                         amount=monthly_budget
                     )
+
         # 3. Delete Category
         elif action == 'delete_category':
             category_id = request.POST.get('category_id')
@@ -691,10 +694,11 @@ def settings(request):
                 cat = get_object_or_404(Category, pk=category_id, user=request.user)
                 cat.delete()
 
-        return redirect('settings')
+        return redirect('budgets')
 
     categories = Category.objects.filter(user=request.user)
-    return render(request, 'transactions/settings.html', {'categories': categories})
+    return render(request, 'transactions/budgets.html', {'categories': categories})
+
 
 def signup(request):
     if request.method == "POST":
@@ -725,3 +729,110 @@ def signup(request):
         form = UserCreationForm()
     return render(request, 'registration/signup.html', {'form': form})
 
+
+@login_required
+def settings(request):
+    # Ensure profile exists for existing users
+    profile, created = Profile.objects.get_or_create(user=request.user)
+
+    if request.method == "POST":
+        action = request.POST.get('action')
+
+        if action == 'upload_avatar':
+            profile_form = ProfileForm(request.POST, request.FILES, instance=profile)
+            if profile_form.is_valid():
+                profile_form.save()
+                messages.success(request, 'Profile picture updated successfully!')
+                return redirect('settings')
+            else:
+                messages.error(request, 'Failed to upload profile picture. Please try again.')
+        
+        elif action == 'remove_avatar':
+            if profile.avatar:
+                profile.avatar.delete()
+                messages.success(request, 'Profile picture removed.')
+            return redirect('settings')
+
+        elif action == 'change_password':
+            password_form = PasswordChangeForm(request.user, request.POST)
+            if password_form.is_valid():
+                user = password_form.save()
+                update_session_auth_hash(request, user)
+                messages.success(request, 'Your password was successfully updated!')
+                return redirect('settings')
+            else:
+                messages.error(request, 'Please correct the password errors below.')
+    else:
+        profile_form = ProfileForm(instance=profile)
+        password_form = PasswordChangeForm(request.user)
+
+    context = {
+        'profile_form': profile_form,
+        'password_form': password_form,
+    }
+    return render(request, 'transactions/settings.html', context)
+
+@login_required
+def export_transactions_csv(request):
+    """Exports user transactions as a CSV within a selected timeframe."""
+    start_date = request.GET.get('start_date', '')
+    end_date = request.GET.get('end_date', '')
+
+    queryset = Transaction.objects.filter(user=request.user)
+
+    if start_date:
+        queryset = queryset.filter(date__gte=start_date)
+    if end_date:
+        queryset = queryset.filter(date__lte=end_date)
+
+    queryset = queryset.order_by('-date')
+
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="pennywise_transactions.csv"'
+
+    writer = csv.writer(response)
+    writer.writerow(['date', 'description', 'amount', 'category', 'notes'])
+
+    for tx in queryset:
+        category_name = tx.category.name if tx.category else 'Uncategorized'
+        writer.writerow([
+            tx.date.strftime('%Y-%m-%d'),
+            tx.description,
+            tx.amount,
+            category_name,
+            tx.notes or ''
+        ])
+
+    return response
+
+
+@login_required
+def export_income_csv(request):
+    """Exports user income entries as a CSV within a selected timeframe."""
+    start_date = request.GET.get('start_date', '')
+    end_date = request.GET.get('end_date', '')
+
+    queryset = PaycheckTransaction.objects.filter(user=request.user)
+
+    if start_date:
+        queryset = queryset.filter(date__gte=start_date)
+    if end_date:
+        queryset = queryset.filter(date__lte=end_date)
+
+    queryset = queryset.order_by('-date')
+
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="pennywise_income.csv"'
+
+    writer = csv.writer(response)
+    writer.writerow(['date', 'source_name', 'amount', 'notes'])
+
+    for paycheck in queryset:
+        writer.writerow([
+            paycheck.date.strftime('%Y-%m-%d'),
+            paycheck.source_name,
+            paycheck.amount,
+            paycheck.notes or ''
+        ])
+
+    return response

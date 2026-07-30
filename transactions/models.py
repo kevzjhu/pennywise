@@ -1,7 +1,23 @@
 from django.db import models
 from django.contrib.auth.models import User 
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 from datetime import date
 from dateutil.relativedelta import relativedelta
+
+class Profile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.user.username}'s Profile"
+
+# Automatically create a Profile when a new User signs up
+@receiver(post_save, sender=User)
+def create_or_update_user_profile(sender, instance, created, **kwargs):
+    if created:
+        Profile.objects.create(user=instance)
+    instance.profile.save()
 
 class Category(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='categories')
@@ -15,7 +31,6 @@ class Category(models.Model):
 
     def __str__(self):
         return f"{self.name}"
-
 
 class CategoryBudget(models.Model):
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='budget_history')

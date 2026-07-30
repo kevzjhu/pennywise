@@ -1,5 +1,10 @@
 from django import forms
-from .models import Transaction, Category, PaycheckTransaction, PaycheckTemplate, RecurringTransactionTemplate
+from .models import Transaction, Category, PaycheckTransaction, PaycheckTemplate, RecurringTransactionTemplate, Profile
+
+class ProfileForm(forms.ModelForm):
+    class Meta:
+        model = Profile
+        fields = ['avatar']
 
 class RecurringTransactionTemplateForm(forms.ModelForm):
     class Meta:
@@ -44,7 +49,6 @@ class TransactionForm(forms.ModelForm):
         if notes and len(notes) > 200:
             raise forms.ValidationError("Notes cannot exceed 200 characters.")
         return notes
-
     
 class PaycheckTemplateForm(forms.ModelForm):
     class Meta:
