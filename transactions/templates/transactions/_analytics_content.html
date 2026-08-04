@@ -24,6 +24,23 @@
     </div>
 </div>
 
+<!-- Filters & Analytics Dashboard -->
+<div class="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
+    <div class="flex justify-between items-center mb-4">
+        <h3 class="text-sm font-bold text-gray-800 dark:text-white">Cash Flow Sankey Diagram</h3>
+        <span class="text-[10px] text-gray-400 dark:text-gray-500 font-medium">Inflows vs Outflows</span>
+    </div>
+    <div class="relative h-[550px] w-full">
+        {% if sankey_data %}
+        <canvas id="sankeyChart"></canvas>
+        {% else %}
+        <div class="flex items-center justify-center h-full text-xs text-gray-400 dark:text-gray-500">
+            No cash flow data available for the selected period.
+        </div>
+        {% endif %}
+    </div>
+</div>
+
 <!-- Charts Row (Side by Side) -->
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
     <!-- Spend vs Budget by Category (Grouped Bar) -->
@@ -163,11 +180,57 @@
 
         if (window.categoryChartInstance) window.categoryChartInstance.destroy();
         if (window.trendChartInstance) window.trendChartInstance.destroy();
+        if (window.sankeyChartInstance) window.sankeyChartInstance.destroy();
 
         const isDark = document.documentElement.classList.contains('dark');
-        const textColor = isDark ? '#9ca3af' : '#4b5563'; // gray-400 vs gray-600
-        const gridColor = isDark ? 'rgba(75, 85, 99, 0.2)' : 'rgba(229, 231, 235, 0.5)'; // gray-600/20 vs gray-200/50
+        const textColor = isDark ? '#9ca3af' : '#4b5563';
+        const gridColor = isDark ? 'rgba(75, 85, 99, 0.2)' : 'rgba(229, 231, 235, 0.5)';
 
+        // 1. Sankey Chart Rendering
+        const sankeyFlows = {{ sankey_data|safe }};
+        const ctxSankey = document.getElementById('sankeyChart');
+
+        if (ctxSankey && sankeyFlows.length > 0) {
+            window.sankeyChartInstance = new Chart(ctxSankey.getContext('2d'), {
+                type: 'sankey',
+                data: {
+                    datasets: [{
+                        label: 'Cash Flow',
+                        data: sankeyFlows,
+                        colorFrom: (c) => {
+                            const from = c.dataset.data[c.dataIndex].from;
+                            if (from === "Savings / Credit Drawdown") return '#ef4444';
+                            return '#10b981';
+                        },
+                        colorTo: (c) => {
+                            const to = c.dataset.data[c.dataIndex].to;
+                            if (to === "Net Savings / Unspent") return '#10b981';
+                            return '#3b82f6';
+                        },
+                        colorMode: 'gradient',
+                        size: 'max',
+                        labels: {
+                            color: textColor,
+                            font: { size: 11, weight: 'bold' }
+                        }
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (c) => `${c.raw.from} → ${c.raw.to}: $${c.raw.flow.toFixed(2)}`
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Render Existing Bar & Line Charts...
         const catLabels = {{ cat_labels|safe }};
         const catSpend = {{ cat_spend|safe }};
         const catBudgets = {{ cat_budgets|safe }};
@@ -175,95 +238,46 @@
         const trendSpend = {{ trend_spend|safe }};
         const trendIncome = {{ trend_income|safe }};
 
-        // 1. Grouped Category Bar Chart (Actual Spend vs Budget Target)
+        // Category Bar Chart
         const ctxCat = document.getElementById('categoryChart').getContext('2d');
         window.categoryChartInstance = new Chart(ctxCat, {
             type: 'bar',
             data: {
                 labels: catLabels,
                 datasets: [
-                    {
-                        label: 'Actual Spend',
-                        data: catSpend,
-                        backgroundColor: '#3b82f6',
-                        borderRadius: 4
-                    },
-                    {
-                        label: 'Budget Target',
-                        data: catBudgets,
-                        backgroundColor: isDark ? '#64748b' : '#94a3b8',
-                        borderRadius: 4
-                    }
+                    { label: 'Actual Spend', data: catSpend, backgroundColor: '#3b82f6', borderRadius: 4 },
+                    { label: 'Budget Target', data: catBudgets, backgroundColor: isDark ? '#64748b' : '#94a3b8', borderRadius: 4 }
                 ]
             },
             options: {
                 indexAxis: 'y',
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { 
-                    legend: { 
-                        position: 'top', 
-                        align: 'end',
-                        labels: { color: textColor }
-                    } 
-                },
+                plugins: { legend: { position: 'top', align: 'end', labels: { color: textColor } } },
                 scales: {
-                    x: { 
-                        grid: { display: false }, 
-                        ticks: { color: textColor, callback: v => '$' + v } 
-                    },
-                    y: { 
-                        grid: { display: false },
-                        ticks: { color: textColor }
-                    }
+                    x: { grid: { display: false }, ticks: { color: textColor, callback: v => '$' + v } },
+                    y: { grid: { display: false }, ticks: { color: textColor } }
                 }
             }
         });
 
-        // 2. Combo Trend Chart
+        // Combo Trend Chart
         const ctxTrend = document.getElementById('trendChart').getContext('2d');
         window.trendChartInstance = new Chart(ctxTrend, {
             data: {
                 labels: trendLabels,
                 datasets: [
-                    {
-                        type: 'line',
-                        label: 'Total Income',
-                        data: trendIncome,
-                        borderColor: isDark ? '#60a5fa' : '#1e3a8a',
-                        backgroundColor: isDark ? '#60a5fa' : '#1e3a8a',
-                        borderWidth: 2,
-                        pointRadius: 3,
-                        fill: false
-                    },
-                    {
-                        type: 'bar',
-                        label: 'Total Spend',
-                        data: trendSpend,
-                        backgroundColor: isDark ? '#3b82f6' : '#60a5fa',
-                        borderRadius: 4
-                    }
+                    { type: 'line', label: 'Total Income', data: trendIncome, borderColor: isDark ? '#60a5fa' : '#1e3a8a', backgroundColor: isDark ? '#60a5fa' : '#1e3a8a', borderWidth: 2, pointRadius: 3, fill: false },
+                    { type: 'bar', label: 'Total Spend', data: trendSpend, backgroundColor: isDark ? '#3b82f6' : '#60a5fa', borderRadius: 4 }
                 ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { 
-                    legend: { 
-                        position: 'top', 
-                        align: 'end',
-                        labels: { color: textColor }
-                    } 
-                },
+                plugins: { legend: { position: 'top', align: 'end', labels: { color: textColor } } },
                 scales: {
-                    x: { 
-                        grid: { display: false },
-                        ticks: { color: textColor }
-                    },
-                    y: { 
-                        grid: { color: gridColor, borderDash: [4, 4] }, 
-                        ticks: { color: textColor, callback: v => '$' + v } 
-                    }
+                    x: { grid: { display: false }, ticks: { color: textColor } },
+                    y: { grid: { color: gridColor, borderDash: [4, 4] }, ticks: { color: textColor, callback: v => '$' + v } }
                 }
             }
         });

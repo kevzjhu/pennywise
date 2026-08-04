@@ -14,6 +14,7 @@ from decimal import Decimal, InvalidOperation
 import calendar
 import datetime
 import csv
+import json
 from .services import validate_and_parse_wealthsimple_csv, validate_and_parse_rbc_csv, validate_and_parse_td_csv
 
 def get_home_context(request):
@@ -508,7 +509,7 @@ def analytics(request):
     budget_progress_list = []
     total_budget_sum = Decimal('0.00')
 
-    # 💡 RESOLVE HISTORICAL BUDGET FOR EACH TARGET MONTH
+    # Resolve Historical Budgets
     for cat in categories_qs:
         spend = expense_qs.filter(category=cat).aggregate(
             total=Coalesce(Sum('amount'), Value(0), output_field=DecimalField())
@@ -519,21 +520,16 @@ def analytics(request):
         target_budget = Decimal('0.00')
         for y in target_years:
             for m in target_months:
-                # End of month date boundary
                 month_end = datetime.date(y, m, calendar.monthrange(y, m)[1])
-
-                # Find the latest budget effective on or before the end of this month
-                active_budget = cat.monthly_budget # default fallback
+                active_budget = cat.monthly_budget
                 for record in history_records:
                     if record.effective_start_date <= month_end:
                         active_budget = record.amount
                     else:
                         break
-
                 target_budget += active_budget
 
         total_budget_sum += target_budget
-
         percent_used = float((spend / target_budget * 100)) if target_budget > 0 else (100.0 if spend > 0 else 0.0)
 
         if percent_used > 100:
@@ -589,6 +585,49 @@ def analytics(request):
     trend_spend = [exp_map.get(k, 0.0) for k in all_keys]
     trend_income = [inc_map.get(k, 0.0) for k in all_keys]
 
+    # Sankey Diagram Data Preparation
+    sankey_data = []
+    central_node = "Monthly Cash Pool"
+
+    # 1. Income Flows -> Cash Pool
+    income_by_source = income_qs.values('source_name').annotate(total=Sum('amount'))
+    for inc in income_by_source:
+        val = float(inc['total'] or 0)
+        if val > 0:
+            sankey_data.append({
+                'from': inc['source_name'],
+                'to': central_node,
+                'flow': val
+            })
+
+    # 2. Deficit Inflow (If Expenses > Income)
+    if total_spend > total_income:
+        sankey_data.append({
+            'from': "Savings / Credit Drawdown",
+            'to': central_node,
+            'flow': float(total_spend - total_income)
+        })
+
+    # 3. Category Expenses Outflows (Cash Pool -> Category)
+    expenses_by_cat = expense_qs.values('category__name').annotate(total=Sum('amount'))
+    for exp in expenses_by_cat:
+        cat_name = exp['category__name'] or 'Uncategorized'
+        val = float(exp['total'] or 0)
+        if val > 0:
+            sankey_data.append({
+                'from': central_node,
+                'to': cat_name,
+                'flow': val
+            })
+
+    # 4. Surplus Outflow (If Income > Expenses)
+    if total_income > total_spend:
+        sankey_data.append({
+            'from': central_node,
+            'to': "Net Savings / Unspent",
+            'flow': float(total_income - total_spend)
+        })
+
     month_choices = [(i, calendar.month_abbr[i]) for i in range(1, 13)]
     category_options = Category.objects.filter(user=request.user)
 
@@ -610,6 +649,7 @@ def analytics(request):
         'trend_spend': trend_spend,
         'trend_income': trend_income,
         'budget_progress_list': budget_progress_list,
+        'sankey_data': json.dumps(sankey_data),  # 👈 Passed to Template
         'selected_years': selected_years,
         'selected_months': selected_months,
         'selected_categories': selected_category_ids,
