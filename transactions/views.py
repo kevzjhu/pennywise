@@ -744,25 +744,7 @@ def signup(request):
     if request.method == "POST":
         form = UserCreationForm(request.POST)
         if form.is_valid():
-            user = form.save()
-            
-            # Default starter categories with monthly targets
-            default_categories = [
-                {'name': 'Groceries', 'monthly_budget': Decimal('500.00')},
-                {'name': 'Home / Rent', 'monthly_budget': Decimal('1200.00')},
-                {'name': 'Utilities', 'monthly_budget': Decimal('150.00')},
-                {'name': 'Entertainment', 'monthly_budget': Decimal('100.00')},
-                {'name': 'Health & Fitness', 'monthly_budget': Decimal('80.00')},
-                {'name': 'Clothes', 'monthly_budget': Decimal('100.00')},
-                {'name': 'General', 'monthly_budget': Decimal('200.00')},
-            ]
-
-            # Bulk create default categories for the new user
-            Category.objects.bulk_create([
-                Category(user=user, name=cat['name'], monthly_budget=cat['monthly_budget'])
-                for cat in default_categories
-            ])
-            
+            user = form.save()            
             login(request, user)
             return redirect('home')
     else:

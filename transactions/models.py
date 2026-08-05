@@ -12,12 +12,40 @@ class Profile(models.Model):
     def __str__(self):
         return f"{self.user.username}'s Profile"
 
-# Automatically create a Profile when a new User signs up
+DEFAULT_CATEGORIES = [
+    {"name": "Clothes", "monthly_budget": 400.00},
+    {"name": "Education", "monthly_budget": 100.00},
+    {"name": "Entertainment", "monthly_budget": 100.00},
+    {"name": "Groceries", "monthly_budget": 300.00},
+    {"name": "Health", "monthly_budget": 100.00},
+    {"name": "Home Improvement", "monthly_budget": 150.00},
+    {"name": "Miscellaneous", "monthly_budget": 100.00},
+    {"name": "Recurring Payment", "monthly_budget": 200.00},
+    {"name": "Utilities", "monthly_budget": 150.00},
+    {"name": "Rent", "monthly_budget": 1900.00},
+    {"name": "Restaurants", "monthly_budget": 200.00},
+    {"name": "Transportation", "monthly_budget": 100.00},
+    {"name": "Travel", "monthly_budget": 200.00},
+]
+
 @receiver(post_save, sender=User)
-def create_or_update_user_profile(sender, instance, created, **kwargs):
+def setup_new_user_account(sender, instance, created, **kwargs):
     if created:
+        # Create user profile
         Profile.objects.create(user=instance)
-    instance.profile.save()
+        
+        # Seed initial categories owned by this user
+        categories_to_create = [
+            Category(
+                user=instance,
+                name=cat["name"],
+                monthly_budget=cat["monthly_budget"]
+            )
+            for cat in DEFAULT_CATEGORIES
+        ]
+        Category.objects.bulk_create(categories_to_create)
+    else:
+        instance.profile.save()
 
 class Category(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='categories')
