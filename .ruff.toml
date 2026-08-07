@@ -1,0 +1,10 @@
+# Ruff's native config file rather than pyproject.toml — a root pyproject.toml
+# without a [build-system] table makes Vercel's Python builder treat the repo
+# as an installable package and fail the deployment.
+line-length = 120
+exclude = ["transactions/migrations", "staticfiles"]
+
+[lint]
+# E501 (line length) is formatter territory, not worth failing CI over.
+select = ["E", "F", "W"]
+ignore = ["E501"]

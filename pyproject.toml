@@ -1,9 +1,0 @@
-[tool.ruff]
-line-length = 120
-exclude = ["transactions/migrations", "staticfiles"]
-
-[tool.ruff.lint]
-# E501 (line length) is reported by the formatter, not worth failing CI over;
-# the rest are the defaults plus unused-import/variable detection.
-select = ["E", "F", "W"]
-ignore = ["E501"]
