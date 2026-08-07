@@ -29,10 +29,19 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install ruff
+
+      - name: Lint
+        run: |
+          ruff check .
 
       - name: Run Database Migrations
         run: |
           python manage.py migrate
+
+      - name: Check for Missing Migrations
+        run: |
+          python manage.py makemigrations --check --dry-run
 
       - name: Test Static File Collection
         run: |
@@ -41,3 +50,16 @@ jobs:
       - name: Run Tests
         run: |
           python manage.py test
+
+      # Runs with DEBUG off so the production security settings are actually
+      # exercised — the test job above always runs with DEBUG=True.
+      - name: Deployment Checks
+        env:
+          DEBUG: 'False'
+          ALLOWED_HOSTS: 'example.com'
+          CSRF_TRUSTED_ORIGINS: 'https://example.com'
+          # Long and random purely to satisfy security.W009 — this key is
+          # thrown away with the runner and is never a real deployment key.
+          SECRET_KEY: 'k3Qv8mZr2LxJt7Wn4Yb9Hs6Dg1Fp5Ac0Ue3Ri8Oq2Xz7Mv4Nw1Tj6Bl'
+        run: |
+          python manage.py check --deploy --fail-level WARNING

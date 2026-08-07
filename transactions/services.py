@@ -14,11 +14,11 @@ REQUIRED_RBC_COLUMNS = {'account type', 'transaction date', 'description 1', 'ca
 
 def get_user_transaction_lookup_sets(user):
     """
-    Fetches the user's existing transactions and builds lookup sets 
+    Fetches the user's existing transactions and builds lookup sets
     for exact and potential (date + amount) duplicate detection.
     """
     user_txs = Transaction.objects.filter(user=user).values('date', 'amount', 'description')
-    
+
     exact_matches = set()
     date_amount_matches = set()
 
@@ -43,7 +43,7 @@ def check_duplicate_status(tx_date, amount, description, exact_matches, date_amo
         return 'Duplicate', True, False
     elif (tx_date, amount) in date_amount_matches:
         return 'Possible Duplicate', True, False
-    
+
     return 'New', False, True
 
 
