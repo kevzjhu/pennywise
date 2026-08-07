@@ -2,7 +2,13 @@ from django.test import TestCase
 from django.contrib.auth.models import User
 from decimal import Decimal
 from datetime import date
-from transactions.models import Category, Transaction, PaycheckTransaction, RecurringTransactionTemplate
+from transactions.models import (
+    Category,
+    Transaction,
+    PaycheckTemplate,
+    PaycheckTransaction,
+    RecurringTransactionTemplate,
+)
 from dateutil.relativedelta import relativedelta
 
 from transactions.forms import TransactionForm
@@ -279,6 +285,172 @@ class SettingsViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.user.profile.refresh_from_db()
         self.assertTrue(self.user.profile.avatar)
+
+class SettingsViewErrorHandlingTest(TestCase):
+    """A failed or unknown settings POST must re-render, not 500."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='testuser', password='oldpass')
+        self.client.login(username='testuser', password='oldpass')
+
+    def test_failed_password_change_rerenders(self):
+        response = self.client.post(reverse('settings'), {
+            'action': 'change_password',
+            'old_password': 'wrongpass',
+            'new_password1': 'newpass123',
+            'new_password2': 'mismatch456',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('profile_form', response.context)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('oldpass'))
+
+    def test_unknown_action_rerenders(self):
+        response = self.client.post(reverse('settings'), {'action': 'nonsense'})
+        self.assertEqual(response.status_code, 200)
+
+
+class FilterValidationTest(TestCase):
+    """Malformed query params must be ignored, not raise."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='testuser', password='testpass')
+        self.client.login(username='testuser', password='testpass')
+        Transaction.objects.create(user=self.user, date='2026-08-01', description='Dinner', amount=30)
+        PaycheckTransaction.objects.create(user=self.user, date='2026-08-01', source_name='Employer', amount=1000)
+
+    def test_non_numeric_amount_bounds(self):
+        for url in (reverse('home'), reverse('income')):
+            response = self.client.get(url, {'min_amount': 'abc', 'max_amount': '!!'})
+            self.assertEqual(response.status_code, 200)
+
+    def test_malformed_dates_and_categories(self):
+        response = self.client.get(reverse('home'), {
+            'start_date': 'not-a-date',
+            'end_date': '2026-13-45',
+            'category': 'DROP TABLE',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Dinner')
+
+
+class AnalyticsEscapingTest(TestCase):
+    """Category and income source names must not reach the page as raw script."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='testuser', password='testpass')
+        self.client.login(username='testuser', password='testpass')
+        cat = Category.objects.create(
+            user=self.user, name='</script><script>alert(1)</script>', monthly_budget=100
+        )
+        Transaction.objects.create(
+            user=self.user, date='2026-08-01', description='x', amount=10, category=cat
+        )
+        PaycheckTransaction.objects.create(
+            user=self.user, date='2026-08-01', source_name='</script><img onerror=alert(2)>', amount=50
+        )
+
+    def test_no_script_breakout(self):
+        response = self.client.get(reverse('analytics'))
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        self.assertNotIn('<script>alert(1)</script>', body)
+        self.assertNotIn('<img onerror=alert(2)>', body)
+        # json_script escapes the angle brackets instead
+        self.assertIn('\\u003C', body)
+
+
+class PaycheckTemplateEditTest(TestCase):
+    """Editing a paycheck rule must not destroy manual overrides."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='testuser', password='testpass')
+        self.client.login(username='testuser', password='testpass')
+        self.template = PaycheckTemplate.objects.create(
+            user=self.user,
+            source_name='Employer',
+            amount=Decimal('1000.00'),
+            frequency='MONTHLY',
+            start_date=date.today() - relativedelta(months=2),
+        )
+        self.template.generate_historical_paychecks()
+
+    def test_edit_preserves_manual_override(self):
+        overridden = PaycheckTransaction.objects.filter(template=self.template).first()
+        overridden.amount = Decimal('1234.56')
+        overridden.notes = 'bonus month'
+        overridden.save()
+
+        response = self.client.post(reverse('income'), {
+            'form_type': 'recurring',
+            'rule_id': self.template.id,
+            'source_name': 'Employer',
+            'amount': '1100.00',
+            'frequency': 'MONTHLY',
+            'start_date': self.template.start_date.strftime('%Y-%m-%d'),
+        })
+        self.assertEqual(response.status_code, 302)
+
+        overridden.refresh_from_db()
+        self.assertEqual(overridden.amount, Decimal('1234.56'))
+        self.assertEqual(overridden.notes, 'bonus month')
+
+
+class RecurringSyncOnGetTest(TestCase):
+    """HTMX partial fetches must not write recurring rows."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='testuser', password='testpass')
+        self.client.login(username='testuser', password='testpass')
+        self.template = RecurringTransactionTemplate.objects.create(
+            user=self.user,
+            description='Netflix',
+            amount=Decimal('15.99'),
+            frequency='MONTHLY',
+            start_date=date.today() - relativedelta(months=2),
+        )
+
+    def test_htmx_partial_does_not_sync(self):
+        self.assertEqual(Transaction.objects.filter(user=self.user).count(), 0)
+        response = self.client.get(reverse('home'), HTTP_HX_REQUEST='true')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Transaction.objects.filter(user=self.user).count(), 0)
+
+    def test_full_page_load_syncs(self):
+        self.client.get(reverse('home'))
+        self.assertGreater(Transaction.objects.filter(user=self.user).count(), 0)
+
+
+class AdminImportScopingTest(TestCase):
+    """Import rows must never resolve a related object owned by another user."""
+
+    def setUp(self):
+        self.user1 = User.objects.create_user(username='user1', password='pass1')
+        self.user2 = User.objects.create_user(username='user2', password='pass2')
+        self.user1_category = Category.objects.create(
+            user=self.user1, name='PrivateCat', monthly_budget=100
+        )
+
+    def test_category_not_borrowed_from_other_user(self):
+        from transactions.admin import UserScopedForeignKeyWidget
+
+        widget = UserScopedForeignKeyWidget(Category, field='name')
+        with self.assertRaises(ValueError):
+            widget.clean('PrivateCat', row={'user': 'user2'})
+
+    def test_category_requires_user_column(self):
+        from transactions.admin import UserScopedForeignKeyWidget
+
+        widget = UserScopedForeignKeyWidget(Category, field='name')
+        with self.assertRaises(ValueError):
+            widget.clean('PrivateCat', row={})
+
+    def test_category_resolves_for_owner(self):
+        from transactions.admin import UserScopedForeignKeyWidget
+
+        widget = UserScopedForeignKeyWidget(Category, field='name')
+        self.assertEqual(widget.clean('PrivateCat', row={'user': 'user1'}), self.user1_category)
+
 
 class DataIsolationTest(TestCase):
     def setUp(self):

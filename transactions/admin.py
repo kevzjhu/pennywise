@@ -22,22 +22,34 @@ class CleanDecimalWidget(DecimalWidget):
             raise ValueError(f"Invalid decimal amount: '{value}'")
 
 
-class UserScopedCategoryWidget(ForeignKeyWidget):
+class UserScopedForeignKeyWidget(ForeignKeyWidget):
     """
-    Custom widget that looks up Category by name AND maps it to 
-    the user specified in the import row (or falls back to first match).
+    Looks up a related row by name, always scoped to the user named in the
+    import row. A row without a resolvable `user` column is rejected rather
+    than silently attached to whichever user happens to own a matching name.
     """
+    lookup_field = 'name'
+
     def clean(self, value, row=None, **kwargs):
         if not value:
             return None
-        
-        username = row.get('user') if row else None
-        if username:
-            category = Category.objects.filter(name=value, user__username=username).first()
-            if category:
-                return category
 
-        return Category.objects.filter(name=value).first()
+        username = row.get('user') if row else None
+        if not username:
+            raise ValueError(
+                f"Cannot resolve '{value}' without a 'user' column in the import row."
+            )
+
+        match = self.model.objects.filter(
+            user__username=username, **{self.lookup_field: value}
+        ).first()
+        if match is None:
+            raise ValueError(f"No {self.model.__name__} named '{value}' for user '{username}'.")
+        return match
+
+
+class UserScopedPaycheckTemplateWidget(UserScopedForeignKeyWidget):
+    lookup_field = 'source_name'
 
 
 # ---------------------------------------------------------------------------
@@ -48,7 +60,7 @@ class TransactionResource(resources.ModelResource):
     category = fields.Field(
         column_name='category',
         attribute='category',
-        widget=UserScopedCategoryWidget(Category, field='name')
+        widget=UserScopedForeignKeyWidget(Category, field='name')
     )
     user = fields.Field(
         column_name='user',
@@ -81,7 +93,7 @@ class PaycheckTransactionResource(resources.ModelResource):
     template = fields.Field(
         column_name='template',
         attribute='template',
-        widget=ForeignKeyWidget(PaycheckTemplate, field='source_name')
+        widget=UserScopedPaycheckTemplateWidget(PaycheckTemplate, field='source_name')
     )
     date = fields.Field(
         column_name='date',

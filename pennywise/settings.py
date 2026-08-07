@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import os
 import dj_database_url
 from pathlib import Path
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -26,11 +27,20 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv("SECRET_KEY", "fallback-unsafe-key-for-dev")
-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 't')
+
+# SECURITY WARNING: keep the secret key used in production secret!
+# The dev fallback is only tolerable with DEBUG on — refuse to boot without a
+# real key otherwise, rather than silently serving on a public value.
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = "fallback-unsafe-key-for-dev"
+    else:
+        raise ImproperlyConfigured(
+            "SECRET_KEY must be set in the environment when DEBUG is off."
+        )
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost').split(',')
 
@@ -159,8 +169,11 @@ if not DEBUG:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
 
-# Tell Django to trust Vercel's domain for CSRF protection
+# Origins trusted for CSRF. Set CSRF_TRUSTED_ORIGINS to this deployment's own
+# host(s), comma-separated — e.g. "https://pennywise.vercel.app". A wildcard
+# such as https://*.vercel.app would trust every other tenant on the platform.
 CSRF_TRUSTED_ORIGINS = [
-    'https://*.vercel.app',
-    # Add your custom domain here if you set one up later
+    origin.strip()
+    for origin in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',')
+    if origin.strip()
 ]

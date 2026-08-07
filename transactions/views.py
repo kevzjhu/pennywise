@@ -8,39 +8,71 @@ from django.contrib import messages
 from django.http import HttpResponse
 from .forms import TransactionForm, PaycheckTransactionForm, PaycheckTemplateForm, RecurringTransactionTemplateForm, ProfileForm
 from .models import Transaction, PaycheckTransaction, PaycheckTemplate, Category, CategoryBudget, RecurringTransactionTemplate, Profile
+from django.db import transaction as db_transaction
 from django.db.models import Sum, Q, Value, DecimalField
 from django.db.models.functions import Coalesce, ExtractYear, ExtractMonth
 from decimal import Decimal, InvalidOperation
 import calendar
 import datetime
 import csv
-import json
 from .services import validate_and_parse_wealthsimple_csv, validate_and_parse_rbc_csv, validate_and_parse_td_csv
+
+
+def parse_amount_param(raw):
+    """Parse an amount filter from a query string. Returns None if it isn't a number."""
+    if not raw:
+        return None
+    try:
+        return Decimal(raw)
+    except InvalidOperation:
+        return None
+
+
+def parse_date_param(raw):
+    """Parse a YYYY-MM-DD date filter from a query string. Returns None if malformed."""
+    if not raw:
+        return None
+    try:
+        return datetime.datetime.strptime(raw, '%Y-%m-%d').date()
+    except ValueError:
+        return None
+
+
+def sync_recurring_templates(templates, sync_method):
+    """Top up missing auto-generated rows for each of `templates`.
+
+    Wrapped in a single transaction so a failed sync can't leave half the
+    projected rows committed. Callers skip this on HTMX partial fetches so
+    filtering, sorting and paging don't each trigger a write.
+    """
+    with db_transaction.atomic():
+        for template in templates:
+            sync_method(template)
+
 
 def get_home_context(request):
     """Helper to build and return the standard context dictionary for home.html."""
     active_templates = RecurringTransactionTemplate.objects.filter(user=request.user)
-    for template in active_templates:
-        template.sync_missing_transactions()
+    sync_recurring_templates(active_templates, RecurringTransactionTemplate.sync_missing_transactions)
 
     form = TransactionForm()
     form.fields['category'].queryset = Category.objects.filter(user=request.user)
-    
+
     recurring_form = RecurringTransactionTemplateForm()
     recurring_form.fields['category'].queryset = Category.objects.filter(user=request.user)
 
-    transactions = Transaction.objects.filter(user=request.user)
+    transactions = Transaction.objects.filter(user=request.user).select_related('category', 'recurring_template')
 
     # Filter & Sort queries...
-    selected_categories = request.GET.getlist('category')
+    selected_categories = [c for c in request.GET.getlist('category') if c.isdigit()]
     if selected_categories:
         transactions = transactions.filter(category__in=selected_categories)
 
     start_date = request.GET.get('start_date', '')
     end_date = request.GET.get('end_date', '')
-    if start_date:
+    if parse_date_param(start_date):
         transactions = transactions.filter(date__gte=start_date)
-    if end_date:
+    if parse_date_param(end_date):
         transactions = transactions.filter(date__lte=end_date)
 
     search_query = request.GET.get('search', '')
@@ -49,10 +81,10 @@ def get_home_context(request):
 
     min_amount = request.GET.get('min_amount', '')
     max_amount = request.GET.get('max_amount', '')
-    if min_amount:
-        transactions = transactions.filter(amount__gte=float(min_amount))
-    if max_amount:
-        transactions = transactions.filter(amount__lte=float(max_amount))
+    if parse_amount_param(min_amount) is not None:
+        transactions = transactions.filter(amount__gte=parse_amount_param(min_amount))
+    if parse_amount_param(max_amount) is not None:
+        transactions = transactions.filter(amount__lte=parse_amount_param(max_amount))
 
     sort_by = request.GET.get('sort_by', 'date')
     direction = request.GET.get('direction', 'desc')
@@ -98,7 +130,8 @@ def home(request):
                 elif bank == "td":
                     candidate_rows = validate_and_parse_td_csv(csv_file, request.user)
                 else:
-                    raise ValueError(f"CSV parsing for '{bank.upper()}' is not supported yet.")
+                    label = (bank or 'unknown').upper()
+                    raise ValueError(f"CSV parsing for '{label}' is not supported yet.")
 
                 user_categories = Category.objects.filter(user=request.user)
 
@@ -223,7 +256,7 @@ def home(request):
         if request.headers.get('HX-Request'):
             form = TransactionForm()
             form.fields['category'].queryset = Category.objects.filter(user=request.user)
-            transactions = Transaction.objects.filter(user=request.user).order_by('-date')
+            transactions = Transaction.objects.filter(user=request.user).select_related('category').order_by('-date')
             paginator = Paginator(transactions, 25)
             page_obj = paginator.get_page(1)
 
@@ -241,27 +274,28 @@ def home(request):
 
     # --- GET REQUEST ---
     active_templates = RecurringTransactionTemplate.objects.filter(user=request.user)
-    for template in active_templates:
-        template.sync_missing_transactions()
+    # Only sync on a full page load — HTMX partials (filter/sort/page) must not write.
+    if not request.headers.get('HX-Request'):
+        sync_recurring_templates(active_templates, RecurringTransactionTemplate.sync_missing_transactions)
 
     form = TransactionForm()
     form.fields['category'].queryset = Category.objects.filter(user=request.user)
-    
+
     recurring_form = RecurringTransactionTemplateForm()
     recurring_form.fields['category'].queryset = Category.objects.filter(user=request.user)
 
-    transactions = Transaction.objects.filter(user=request.user)
+    transactions = Transaction.objects.filter(user=request.user).select_related('category', 'recurring_template')
 
     # Filter & Sort queries...
-    selected_categories = request.GET.getlist('category')
+    selected_categories = [c for c in request.GET.getlist('category') if c.isdigit()]
     if selected_categories:
         transactions = transactions.filter(category__in=selected_categories)
 
     start_date = request.GET.get('start_date', '')
     end_date = request.GET.get('end_date', '')
-    if start_date:
+    if parse_date_param(start_date):
         transactions = transactions.filter(date__gte=start_date)
-    if end_date:
+    if parse_date_param(end_date):
         transactions = transactions.filter(date__lte=end_date)
 
     search_query = request.GET.get('search', '')
@@ -270,10 +304,10 @@ def home(request):
 
     min_amount = request.GET.get('min_amount', '')
     max_amount = request.GET.get('max_amount', '')
-    if min_amount:
-        transactions = transactions.filter(amount__gte=float(min_amount))
-    if max_amount:
-        transactions = transactions.filter(amount__lte=float(max_amount))
+    if parse_amount_param(min_amount) is not None:
+        transactions = transactions.filter(amount__gte=parse_amount_param(min_amount))
+    if parse_amount_param(max_amount) is not None:
+        transactions = transactions.filter(amount__lte=parse_amount_param(max_amount))
 
     sort_by = request.GET.get('sort_by', 'date')
     direction = request.GET.get('direction', 'desc')
@@ -352,8 +386,9 @@ def income(request):
                 template_form = PaycheckTemplateForm(request.POST, instance=instance)
                 if template_form.is_valid():
                     template = template_form.save()
-                    PaycheckTransaction.objects.filter(user=request.user, template=template).delete()
-                    template.generate_historical_paychecks()
+                    # Keep already-posted paychecks intact (including manual overrides),
+                    # only fill in dates the template projects but no row exists for.
+                    template.sync_missing_paychecks()
             else:
                 template_form = PaycheckTemplateForm(request.POST)
                 if template_form.is_valid():
@@ -379,7 +414,7 @@ def income(request):
                 paycheck.save()
 
         if request.headers.get('HX-Request'):
-            paychecks = PaycheckTransaction.objects.filter(user=request.user).order_by('-date')
+            paychecks = PaycheckTransaction.objects.filter(user=request.user).select_related('template').order_by('-date')
             paginator = Paginator(paychecks, 25)
             page_obj = paginator.get_page(1)
             return render(request, "transactions/_income_table.html", {'paychecks': page_obj, 'current_filters': {}})
@@ -388,19 +423,20 @@ def income(request):
 
     # --- GET REQUEST ---
     active_templates = PaycheckTemplate.objects.filter(user=request.user)
-    for template in active_templates:
-        template.sync_missing_paychecks()
+    # Only sync on a full page load — HTMX partials (filter/sort/page) must not write.
+    if not request.headers.get('HX-Request'):
+        sync_recurring_templates(active_templates, PaycheckTemplate.sync_missing_paychecks)
 
     paycheck_form = PaycheckTransactionForm()
     template_form = PaycheckTemplateForm()
-    paychecks = PaycheckTransaction.objects.filter(user=request.user)
+    paychecks = PaycheckTransaction.objects.filter(user=request.user).select_related('template')
 
     # Filters
     start_date = request.GET.get('start_date', '')
     end_date = request.GET.get('end_date', '')
-    if start_date:
+    if parse_date_param(start_date):
         paychecks = paychecks.filter(date__gte=start_date)
-    if end_date:
+    if parse_date_param(end_date):
         paychecks = paychecks.filter(date__lte=end_date)
 
     search_query = request.GET.get('search', '')
@@ -409,10 +445,10 @@ def income(request):
 
     min_amount = request.GET.get('min_amount', '')
     max_amount = request.GET.get('max_amount', '')
-    if min_amount:
-        paychecks = paychecks.filter(amount__gte=float(min_amount))
-    if max_amount:
-        paychecks = paychecks.filter(amount__lte=float(max_amount))
+    if parse_amount_param(min_amount) is not None:
+        paychecks = paychecks.filter(amount__gte=parse_amount_param(min_amount))
+    if parse_amount_param(max_amount) is not None:
+        paychecks = paychecks.filter(amount__lte=parse_amount_param(max_amount))
 
     # Sorting
     sort_by = request.GET.get('sort_by', 'date')
@@ -499,7 +535,7 @@ def analytics(request):
     net_savings = total_income - total_spend
     savings_rate = (net_savings / total_income * 100) if total_income > 0 else 0
 
-    categories_qs = Category.objects.filter(user=request.user)
+    categories_qs = Category.objects.filter(user=request.user).prefetch_related('budget_history')
     if selected_category_ids:
         categories_qs = categories_qs.filter(id__in=selected_category_ids)
 
@@ -509,13 +545,20 @@ def analytics(request):
     budget_progress_list = []
     total_budget_sum = Decimal('0.00')
 
+    # One grouped aggregate instead of a query per category
+    spend_by_category = {
+        row['category']: row['total']
+        for row in expense_qs.values('category').annotate(
+            total=Coalesce(Sum('amount'), Value(0), output_field=DecimalField())
+        )
+    }
+
     # Resolve Historical Budgets
     for cat in categories_qs:
-        spend = expense_qs.filter(category=cat).aggregate(
-            total=Coalesce(Sum('amount'), Value(0), output_field=DecimalField())
-        )['total']
+        spend = spend_by_category.get(cat.id, Decimal('0.00'))
 
-        history_records = list(cat.budget_history.order_by('effective_start_date'))
+        # sorted() over the prefetched cache — .order_by() here would re-query per category
+        history_records = sorted(cat.budget_history.all(), key=lambda r: r.effective_start_date)
 
         target_budget = Decimal('0.00')
         for y in target_years:
@@ -631,7 +674,7 @@ def analytics(request):
     month_choices = [(i, calendar.month_abbr[i]) for i in range(1, 13)]
     category_options = Category.objects.filter(user=request.user)
 
-    transactions_list = expense_qs.order_by('-date')
+    transactions_list = expense_qs.select_related('category').order_by('-date')
     paginator = Paginator(transactions_list, 15)
     page_number = request.GET.get('page', 1)
     page_obj = paginator.get_page(page_number)
@@ -649,7 +692,8 @@ def analytics(request):
         'trend_spend': trend_spend,
         'trend_income': trend_income,
         'budget_progress_list': budget_progress_list,
-        'sankey_data': json.dumps(sankey_data),  # 👈 Passed to Template
+        # Rendered via |json_script in the template, so pass the raw list, not a JSON string
+        'sankey_data': sankey_data,
         'selected_years': selected_years,
         'selected_months': selected_months,
         'selected_categories': selected_category_ids,
@@ -757,6 +801,11 @@ def settings(request):
     # Ensure profile exists for existing users
     profile, created = Profile.objects.get_or_create(user=request.user)
 
+    # Both forms are always bound to something so re-rendering after a failed
+    # POST can't hit an unbound local.
+    profile_form = ProfileForm(instance=profile)
+    password_form = PasswordChangeForm(request.user)
+
     if request.method == "POST":
         action = request.POST.get('action')
 
@@ -768,7 +817,7 @@ def settings(request):
                 return redirect('settings')
             else:
                 messages.error(request, 'Failed to upload profile picture. Please try again.')
-        
+
         elif action == 'remove_avatar':
             if profile.avatar:
                 profile.avatar.delete()
@@ -784,9 +833,9 @@ def settings(request):
                 return redirect('settings')
             else:
                 messages.error(request, 'Please correct the password errors below.')
-    else:
-        profile_form = ProfileForm(instance=profile)
-        password_form = PasswordChangeForm(request.user)
+
+        else:
+            messages.error(request, 'Unrecognised action.')
 
     context = {
         'profile_form': profile_form,
