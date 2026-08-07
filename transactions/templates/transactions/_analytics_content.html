@@ -173,8 +173,23 @@
     {% endif %}
 </div>
 
+<!-- Chart data is emitted via json_script so user-supplied category and income
+     source names can never break out of the JSON and into executable script. -->
+{{ sankey_data|json_script:"sankey-data" }}
+{{ cat_labels|json_script:"cat-labels" }}
+{{ cat_spend|json_script:"cat-spend" }}
+{{ cat_budgets|json_script:"cat-budgets" }}
+{{ trend_labels|json_script:"trend-labels" }}
+{{ trend_spend|json_script:"trend-spend" }}
+{{ trend_income|json_script:"trend-income" }}
+
 <!-- Safe Execution Scripts for Rendering Chart.js -->
 <script>
+    function chartData(elementId) {
+        const el = document.getElementById(elementId);
+        return el ? JSON.parse(el.textContent) : [];
+    }
+
     function renderCharts() {
         if (typeof Chart === 'undefined') return;
 
@@ -187,7 +202,7 @@
         const gridColor = isDark ? 'rgba(75, 85, 99, 0.2)' : 'rgba(229, 231, 235, 0.5)';
 
         // 1. Sankey Chart Rendering
-        const sankeyFlows = {{ sankey_data|safe }};
+        const sankeyFlows = chartData('sankey-data');
         const ctxSankey = document.getElementById('sankeyChart');
 
         if (ctxSankey && sankeyFlows.length > 0) {
@@ -231,12 +246,12 @@
         }
 
         // Render Existing Bar & Line Charts...
-        const catLabels = {{ cat_labels|safe }};
-        const catSpend = {{ cat_spend|safe }};
-        const catBudgets = {{ cat_budgets|safe }};
-        const trendLabels = {{ trend_labels|safe }};
-        const trendSpend = {{ trend_spend|safe }};
-        const trendIncome = {{ trend_income|safe }};
+        const catLabels = chartData('cat-labels');
+        const catSpend = chartData('cat-spend');
+        const catBudgets = chartData('cat-budgets');
+        const trendLabels = chartData('trend-labels');
+        const trendSpend = chartData('trend-spend');
+        const trendIncome = chartData('trend-income');
 
         // Category Bar Chart
         const ctxCat = document.getElementById('categoryChart').getContext('2d');
