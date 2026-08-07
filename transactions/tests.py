@@ -4,18 +4,19 @@ from decimal import Decimal
 from datetime import date
 from transactions.models import (
     Category,
+    CategoryBudget,
     Transaction,
     PaycheckTemplate,
     PaycheckTransaction,
     RecurringTransactionTemplate,
 )
+from transactions.analytics import budget_for_period, budget_status, build_sankey_flows
 from dateutil.relativedelta import relativedelta
 
 from transactions.forms import TransactionForm
 
 from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
-import csv
 import io
 
 # Create your tests here.
@@ -25,8 +26,8 @@ class CategoryModelTest(TestCase):
         self.user = User.objects.create_user(username='testuser', password='testpass')
         # Use get_or_create to account for the post_save signal
         self.category, _ = Category.objects.get_or_create(
-            user=self.user, 
-            name='TestGroceries', 
+            user=self.user,
+            name='TestGroceries',
             defaults={'monthly_budget': Decimal('300.00')}
         )
 
@@ -66,7 +67,7 @@ class RecurringTransactionTemplateTest(TestCase):
             expected_count += 1
             current += relativedelta(months=1)
 
-        created = self.template.generate_historical_transactions()
+        created = self.template.generate_history()
         self.assertEqual(created, expected_count)
         self.assertEqual(Transaction.objects.filter(user=self.user, recurring_template=self.template).count(), expected_count)
 
@@ -79,11 +80,11 @@ class RecurringTransactionTemplateTest(TestCase):
             expected += 1
             current += relativedelta(months=1)
 
-        self.template.generate_historical_transactions()
+        self.template.generate_history()
         tx = Transaction.objects.filter(user=self.user, recurring_template=self.template).first()
         tx.delete()
-        
-        self.template.sync_missing_transactions()
+
+        self.template.sync_missing()
         self.assertEqual(Transaction.objects.filter(user=self.user, recurring_template=self.template).count(), expected)
 
 class TransactionFormTest(TestCase):
@@ -234,7 +235,7 @@ class BudgetsViewTest(TestCase):
 
     def test_edit_category(self):
         cat = Category.objects.create(user=self.user, name='Old Name', monthly_budget=100)
-        response = self.client.post(reverse('budgets'), {
+        self.client.post(reverse('budgets'), {
             'action': 'edit_category',
             'category_id': cat.id,
             'name': 'New Name',
@@ -246,7 +247,7 @@ class BudgetsViewTest(TestCase):
 
     def test_delete_category(self):
         cat = Category.objects.create(user=self.user, name='To Delete', monthly_budget=100)
-        response = self.client.post(reverse('budgets'), {
+        self.client.post(reverse('budgets'), {
             'action': 'delete_category',
             'category_id': cat.id,
         }, follow=True)
@@ -270,7 +271,6 @@ class SettingsViewTest(TestCase):
 
     def test_avatar_upload(self):
         # Create a small dummy image
-        import io
         from PIL import Image
         img_io = io.BytesIO()
         img = Image.new('RGB', (100, 100), color='red')
@@ -373,7 +373,7 @@ class PaycheckTemplateEditTest(TestCase):
             frequency='MONTHLY',
             start_date=date.today() - relativedelta(months=2),
         )
-        self.template.generate_historical_paychecks()
+        self.template.generate_history()
 
     def test_edit_preserves_manual_override(self):
         overridden = PaycheckTransaction.objects.filter(template=self.template).first()
@@ -450,6 +450,152 @@ class AdminImportScopingTest(TestCase):
 
         widget = UserScopedForeignKeyWidget(Category, field='name')
         self.assertEqual(widget.clean('PrivateCat', row={'user': 'user1'}), self.user1_category)
+
+
+class RecurringScheduleTest(TestCase):
+    """The scheduling behaviour both template types now share."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='testuser', password='testpass')
+
+    def make_template(self, frequency, **kwargs):
+        return RecurringTransactionTemplate.objects.create(
+            user=self.user,
+            description='Rule',
+            amount=Decimal('10.00'),
+            frequency=frequency,
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 2, 1),
+            **kwargs,
+        )
+
+    def test_weekly_step(self):
+        dates = list(self.make_template('WEEKLY').scheduled_dates())
+        self.assertEqual(dates[0], date(2026, 1, 1))
+        self.assertEqual(dates[1], date(2026, 1, 8))
+
+    def test_biweekly_step(self):
+        dates = list(self.make_template('BI_WEEKLY').scheduled_dates())
+        self.assertEqual(dates[1], date(2026, 1, 15))
+
+    def test_monthly_step(self):
+        dates = list(self.make_template('MONTHLY').scheduled_dates())
+        self.assertEqual(dates, [date(2026, 1, 1), date(2026, 2, 1)])
+
+    def test_unknown_frequency_yields_nothing(self):
+        template = self.make_template('MONTHLY')
+        template.frequency = 'FORTNIGHTLY'
+        self.assertEqual(list(template.scheduled_dates()), [])
+
+    def test_skip_excludes_date_and_persists(self):
+        template = self.make_template('MONTHLY')
+        template.skip(date(2026, 1, 1))
+        template.refresh_from_db()
+        self.assertEqual(template.skipped_dates, ['2026-01-01'])
+        self.assertEqual(list(template.scheduled_dates()), [date(2026, 2, 1)])
+
+    def test_skip_is_idempotent(self):
+        template = self.make_template('MONTHLY')
+        template.skip(date(2026, 1, 1))
+        template.skip(date(2026, 1, 1))
+        self.assertEqual(template.skipped_dates, ['2026-01-01'])
+
+    def test_deleting_row_skips_its_recurrence(self):
+        """A deleted recurring row must not come straight back on the next sync."""
+        template = self.make_template('MONTHLY')
+        template.sync_missing()
+        self.assertEqual(template.transactions.count(), 2)
+
+        self.client.login(username='testuser', password='testpass')
+        victim = template.transactions.order_by('date').first()
+        self.client.post(reverse('home'), {'action_type': 'single_delete', 'delete_id': victim.id})
+
+        template.refresh_from_db()
+        self.assertIn('2026-01-01', template.skipped_dates)
+        self.assertEqual(template.sync_missing(), 0)
+
+
+class AnalyticsModuleTest(TestCase):
+    """The extracted analytics helpers, exercised without a request."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='testuser', password='testpass')
+        self.category = Category.objects.create(
+            user=self.user, name='Food', monthly_budget=Decimal('100.00')
+        )
+
+    def test_budget_status_thresholds(self):
+        self.assertEqual(budget_status(0), 'ok')
+        self.assertEqual(budget_status(79.9), 'ok')
+        self.assertEqual(budget_status(80), 'warning')
+        self.assertEqual(budget_status(100), 'warning')
+        self.assertEqual(budget_status(100.1), 'over')
+
+    def test_budget_for_period_uses_budget_in_force(self):
+        CategoryBudget.objects.create(
+            category=self.category, effective_start_date=date(2026, 3, 1), amount=Decimal('250.00')
+        )
+        history = sorted(
+            self.category.budget_history.all(), key=lambda r: r.effective_start_date
+        )
+        # Feb predates the raise, April follows it
+        self.assertEqual(
+            budget_for_period(self.category, history, [2026], [2]), Decimal('100.00')
+        )
+        self.assertEqual(
+            budget_for_period(self.category, history, [2026], [4]), Decimal('250.00')
+        )
+
+    def test_sankey_balances_on_surplus(self):
+        PaycheckTransaction.objects.create(
+            user=self.user, date='2026-08-01', source_name='Employer', amount=Decimal('1000.00')
+        )
+        Transaction.objects.create(
+            user=self.user, date='2026-08-01', description='Dinner',
+            amount=Decimal('300.00'), category=self.category,
+        )
+        flows = build_sankey_flows(
+            Transaction.objects.filter(user=self.user),
+            PaycheckTransaction.objects.filter(user=self.user),
+            Decimal('300.00'),
+            Decimal('1000.00'),
+        )
+        destinations = {f['to'] for f in flows}
+        self.assertIn('Net Savings / Unspent', destinations)
+        self.assertNotIn('Savings / Credit Drawdown', {f['from'] for f in flows})
+
+    def test_sankey_shows_drawdown_on_deficit(self):
+        Transaction.objects.create(
+            user=self.user, date='2026-08-01', description='Rent',
+            amount=Decimal('900.00'), category=self.category,
+        )
+        flows = build_sankey_flows(
+            Transaction.objects.filter(user=self.user),
+            PaycheckTransaction.objects.none(),
+            Decimal('900.00'),
+            Decimal('0.00'),
+        )
+        self.assertIn('Savings / Credit Drawdown', {f['from'] for f in flows})
+
+
+class IncomeFilterTest(TestCase):
+    """The income table shares TableFilters but has no category column."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='testuser', password='testpass')
+        self.client.login(username='testuser', password='testpass')
+        PaycheckTransaction.objects.create(
+            user=self.user, date='2026-08-01', source_name='Employer', amount=Decimal('1000.00')
+        )
+
+    def test_category_param_ignored_not_fatal(self):
+        response = self.client.get(reverse('income'), {'category': '1'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Employer')
+
+    def test_search_matches_source_name(self):
+        response = self.client.get(reverse('income'), {'search': 'Employ'})
+        self.assertContains(response, 'Employer')
 
 
 class DataIsolationTest(TestCase):

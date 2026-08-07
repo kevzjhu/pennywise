@@ -1,9 +1,80 @@
 from django.db import models
-from django.contrib.auth.models import User 
+from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from datetime import date
 from dateutil.relativedelta import relativedelta
+
+DATE_KEY_FORMAT = '%Y-%m-%d'
+
+FREQUENCY_CHOICES = [
+    ('WEEKLY', 'Weekly'),
+    ('BI_WEEKLY', 'Bi-Weekly'),
+    ('MONTHLY', 'Monthly'),
+]
+
+FREQUENCY_STEPS = {
+    'WEEKLY': relativedelta(weeks=1),
+    'BI_WEEKLY': relativedelta(weeks=2),
+    'MONTHLY': relativedelta(months=1),
+}
+
+
+class RecurringSchedule:
+    """Calendar behaviour shared by the templates that project rows forward.
+
+    A plain mixin rather than an abstract model, so the concrete models keep
+    their own field declarations and no migration is needed. Expects
+    `frequency`, `start_date`, `end_date` and `skipped_dates` on the host.
+    """
+
+    def build_row(self, when):
+        """Return an unsaved row for the occurrence on `when`."""
+        raise NotImplementedError
+
+    def existing_dates(self):
+        """Dates already covered by a stored row for this template."""
+        raise NotImplementedError
+
+    def create_for_dates(self, dates):
+        rows = [self.build_row(when) for when in dates]
+        if rows:
+            type(rows[0]).objects.bulk_create(rows)
+        return len(rows)
+
+    def generate_history(self):
+        """Create every row this schedule projects, ignoring what already exists."""
+        return self.create_for_dates(self.scheduled_dates())
+
+    def sync_missing(self):
+        """Create only the projected rows that don't exist yet."""
+        return self.create_for_dates(self.scheduled_dates(excluding=self.existing_dates()))
+
+    def scheduled_dates(self, excluding=()):
+        """Yield every date this schedule projects, minus skips and `excluding`."""
+        step = FREQUENCY_STEPS.get(self.frequency)
+        if step is None:
+            return
+
+        excluded = set(self.skipped_dates or [])
+        excluded.update(d.strftime(DATE_KEY_FORMAT) for d in excluding)
+
+        today = date.today()
+        cutoff_date = min(today, self.end_date) if self.end_date else today
+        current_date = self.start_date
+
+        while current_date <= cutoff_date:
+            if current_date.strftime(DATE_KEY_FORMAT) not in excluded:
+                yield current_date
+            current_date += step
+
+    def skip(self, when):
+        """Record `when` as skipped so later syncs don't re-create that row."""
+        date_key = when.strftime(DATE_KEY_FORMAT)
+        if date_key not in self.skipped_dates:
+            self.skipped_dates.append(date_key)
+            self.save(update_fields=['skipped_dates'])
+
 
 class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
@@ -33,7 +104,7 @@ def setup_new_user_account(sender, instance, created, **kwargs):
     if created:
         # Create user profile
         Profile.objects.create(user=instance)
-        
+
         # Seed initial categories owned by this user
         categories_to_create = [
             Category(
@@ -72,12 +143,7 @@ class CategoryBudget(models.Model):
     def __str__(self):
         return f"{self.category.name} from {self.effective_start_date}: ${self.amount}"
 
-class RecurringTransactionTemplate(models.Model):
-    FREQUENCY_CHOICES = [
-        ('WEEKLY', 'Weekly'),
-        ('BI_WEEKLY', 'Bi-Weekly'),
-        ('MONTHLY', 'Monthly'),
-    ]
+class RecurringTransactionTemplate(RecurringSchedule, models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='recurring_templates')
     description = models.CharField(max_length=255)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
@@ -89,92 +155,28 @@ class RecurringTransactionTemplate(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     skipped_dates = models.JSONField(default=list, blank=True)
 
-    def generate_historical_transactions(self):
-        current_date = self.start_date
-        today = date.today()
-        cutoff_date = min(today, self.end_date) if self.end_date else today
-
-        if self.frequency == 'WEEKLY':
-            step = relativedelta(weeks=1)
-        elif self.frequency == 'BI_WEEKLY':
-            step = relativedelta(weeks=2)
-        elif self.frequency == 'MONTHLY':
-            step = relativedelta(months=1)
-        else:
-            return 0
-
-        skipped_set = set(self.skipped_dates or [])
-        transactions_to_create = []
-
-        while current_date <= cutoff_date:
-            date_str = current_date.strftime('%Y-%m-%d')
-            if date_str not in skipped_set:
-                transactions_to_create.append(
-                    Transaction(
-                        user=self.user,
-                        recurring_template=self,
-                        description=self.description,
-                        amount=self.amount,
-                        category=self.category,
-                        notes = self.notes,
-                        date=current_date
-                    )
-                )
-            current_date += step
-
-        if transactions_to_create:
-            Transaction.objects.bulk_create(transactions_to_create)
-        return len(transactions_to_create)
-
-    def sync_missing_transactions(self):
-        existing_dates = set(
-            self.transactions.values_list('date', flat=True)
+    def build_row(self, when):
+        return Transaction(
+            user=self.user,
+            recurring_template=self,
+            description=self.description,
+            amount=self.amount,
+            category=self.category,
+            notes=self.notes,
+            date=when,
         )
-        existing_date_strings = {d.strftime('%Y-%m-%d') for d in existing_dates}
-        ignored_dates = existing_date_strings.union(set(self.skipped_dates or []))
 
-        current_date = self.start_date
-        today = date.today()
-        cutoff_date = min(today, self.end_date) if self.end_date else today
-
-        if self.frequency == 'WEEKLY':
-            step = relativedelta(weeks=1)
-        elif self.frequency == 'BI_WEEKLY':
-            step = relativedelta(weeks=2)
-        elif self.frequency == 'MONTHLY':
-            step = relativedelta(months=1)
-        else:
-            return 0
-
-        transactions_to_create = []
-
-        while current_date <= cutoff_date:
-            date_str = current_date.strftime('%Y-%m-%d')
-            if date_str not in ignored_dates:
-                transactions_to_create.append(
-                    Transaction(
-                        user=self.user,
-                        recurring_template=self,
-                        description=self.description,
-                        amount=self.amount,
-                        category=self.category,
-                        notes = self.notes,
-                        date=current_date
-                    )
-                )
-            current_date += step
-
-        if transactions_to_create:
-            Transaction.objects.bulk_create(transactions_to_create)
+    def existing_dates(self):
+        return self.transactions.values_list('date', flat=True)
 
 
 # Update Transaction model to link to RecurringTransactionTemplate
 class Transaction(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='transactions')
     recurring_template = models.ForeignKey(
-        RecurringTransactionTemplate, 
-        on_delete=models.SET_NULL, 
-        null=True, 
+        RecurringTransactionTemplate,
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
         related_name='transactions'
     )
@@ -187,12 +189,7 @@ class Transaction(models.Model):
     def __str__(self):
         return f"{self.date} - {self.description} - ${self.amount}"
 
-class PaycheckTemplate(models.Model):
-    FREQUENCY_CHOICES = [
-        ('WEEKLY', 'Weekly'),
-        ('BI_WEEKLY', 'Bi-Weekly'),
-        ('MONTHLY', 'Monthly'),
-    ]
+class PaycheckTemplate(RecurringSchedule, models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='paycheck_templates')  # 💡 Link to User
     source_name = models.CharField(max_length=100)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
@@ -203,83 +200,18 @@ class PaycheckTemplate(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     skipped_dates = models.JSONField(default=list, blank=True)
 
-    def generate_historical_paychecks(self):
-        current_pay_date = self.start_date
-        today = date.today()
-        cutoff_date = min(today, self.end_date) if self.end_date else today
-        
-        if self.frequency == 'WEEKLY':
-            step = relativedelta(weeks=1)
-        elif self.frequency == 'BI_WEEKLY':
-            step = relativedelta(weeks=2)
-        elif self.frequency == 'MONTHLY':
-            step = relativedelta(months=1)
-        else:
-            return 0
-
-        skipped_set = set(self.skipped_dates or [])
-        paychecks_to_create = []
-
-        while current_pay_date <= cutoff_date:
-            date_str = current_pay_date.strftime('%Y-%m-%d')
-            
-            if date_str not in skipped_set:
-                paychecks_to_create.append(
-                    PaycheckTransaction(
-                        user=self.user,  # 💡 Set user on auto-generated paychecks
-                        template=self,
-                        source_name=self.source_name,
-                        amount=self.amount,
-                        notes = self.notes,
-                        date=current_pay_date
-                    )
-                )
-            current_pay_date += step
-
-        if paychecks_to_create:
-            PaycheckTransaction.objects.bulk_create(paychecks_to_create)
-            
-        return len(paychecks_to_create)
-
-    def sync_missing_paychecks(self):
-        existing_dates = set(
-            self.paychecktransaction_set.values_list('date', flat=True)
+    def build_row(self, when):
+        return PaycheckTransaction(
+            user=self.user,  # 💡 Set user on auto-generated paychecks
+            template=self,
+            source_name=self.source_name,
+            amount=self.amount,
+            notes=self.notes,
+            date=when,
         )
-        existing_date_strings = {d.strftime('%Y-%m-%d') for d in existing_dates}
-        ignored_dates = existing_date_strings.union(set(self.skipped_dates or []))
 
-        current_pay_date = self.start_date
-        today = date.today()
-        cutoff_date = min(today, self.end_date) if self.end_date else today
-
-        if self.frequency == 'WEEKLY':
-            step = relativedelta(weeks=1)
-        elif self.frequency == 'BI_WEEKLY':
-            step = relativedelta(weeks=2)
-        elif self.frequency == 'MONTHLY':
-            step = relativedelta(months=1)
-        else:
-            return 0
-
-        paychecks_to_create = []
-
-        while current_pay_date <= cutoff_date:
-            date_str = current_pay_date.strftime('%Y-%m-%d')
-            if date_str not in ignored_dates:
-                paychecks_to_create.append(
-                    PaycheckTransaction(
-                        user=self.user,  # 💡 Set user
-                        template=self,
-                        source_name=self.source_name,
-                        amount=self.amount,
-                        notes = self.notes,
-                        date=current_pay_date
-                    )
-                )
-            current_pay_date += step
-
-        if paychecks_to_create:
-            PaycheckTransaction.objects.bulk_create(paychecks_to_create)
+    def existing_dates(self):
+        return self.paychecktransaction_set.values_list('date', flat=True)
 
 class PaycheckTransaction(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='paycheck_transactions')  # 💡 Link to User
@@ -288,6 +220,6 @@ class PaycheckTransaction(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     date = models.DateField(db_index=True)
     notes = models.TextField(blank=True, null=True)
-    
+
     class Meta:
         ordering = ['-date']

@@ -72,14 +72,18 @@
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {% for item in budget_progress_list %}
         <div class="bg-gray-50/70 dark:bg-gray-700/50 p-3.5 rounded-lg border border-gray-100 dark:border-gray-700 space-y-2">
+            {% comment %}
+            The view reports a semantic status (over / warning / ok); the
+            colours for it belong here, not in Python.
+            {% endcomment %}
             <div class="flex justify-between items-center text-xs">
                 <span class="font-semibold text-gray-800 dark:text-gray-200">{{ item.name }}</span>
-                <span class="font-bold {{ item.text_color }}">{{ item.raw_percent|floatformat:1 }}%</span>
+                <span class="font-bold {% if item.status == 'over' %}text-red-600{% elif item.status == 'warning' %}text-amber-600{% else %}text-emerald-600{% endif %}">{{ item.raw_percent|floatformat:1 }}%</span>
             </div>
-            
+
             <!-- Progress Track -->
             <div class="w-full bg-gray-200 dark:bg-gray-600 h-2 rounded-full overflow-hidden">
-                <div class="{{ item.status_color }} h-full rounded-full transition-all duration-300" style="width: {{ item.percent }}%;"></div>
+                <div class="{% if item.status == 'over' %}bg-red-500{% elif item.status == 'warning' %}bg-amber-500{% else %}bg-emerald-500{% endif %} h-full rounded-full transition-all duration-300" style="width: {{ item.percent }}%;"></div>
             </div>
 
             <div class="flex justify-between items-center text-[11px] text-gray-500 dark:text-gray-400">

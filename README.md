@@ -24,8 +24,11 @@
   * Real-time progress indicators with status color thresholds (Emerald / Amber / Red) for monthly budget variance tracking.
   ![Pennywise Analytics](assets/Analytics_1.png)
   ![Pennywise Analytics](assets/Analytics_2.png)
+* **🔁 Recurring Expense Rules:**
+  * The same projection engine applied to expenses — define a rule once (rent, subscriptions) and it back-fills history and keeps itself topped up, honouring per-date skips.
 * **⚙️ Settings and Configuration:**
   * Configure the spending categories you care about and the allocated monthly budget
+  * Profile avatar upload, password change, dark mode toggle, and CSV export of transactions and income
   ![Pennywise Settings](assets/Settings.png)
 
 
@@ -36,7 +39,7 @@
 * **Backend Framework:** Python / Django (ORM, Class/Function-Based Views, Authentication)
 * **Frontend UI & Interactivity:** Tailwind CSS, HTMX, Chart.js
 * **Database:** SQLite (Development/UAT)
-* **Data Processing & Analytics:** Django Aggregations (`Sum`, `Coalesce`, `ExtractMonth/Year`), Pandas, Relativedelta
+* **Data Processing & Analytics:** Django Aggregations (`Sum`, `Coalesce`, `ExtractMonth/Year`), `dateutil.relativedelta`
 
 ---
 ## 📈 Key Database Models & Schema Design
@@ -44,9 +47,16 @@
 | Model | Description | Key Relationships & Constraints |
 | :--- | :--- | :--- |
 | **`Category`** | User-defined budget buckets with target limits. | `ForeignKey(User)` <br> • *Constraint:* Unique together (`user`, `name`) |
-| **`Transaction`** | Individual expense entries mapped to a date and category. | `ForeignKey(User)` <br> • `ForeignKey(Category, SET_NULL)` |
+| **`CategoryBudget`** | Effective-dated budget history, so past months are scored against the budget in force at the time. | `ForeignKey(Category, CASCADE)` <br> • *Constraint:* Unique together (`category`, `effective_start_date`) |
+| **`Transaction`** | Individual expense entries mapped to a date and category. | `ForeignKey(User)` <br> • `ForeignKey(Category, SET_NULL)` <br> • `ForeignKey(RecurringTransactionTemplate, SET_NULL)` |
+| **`RecurringTransactionTemplate`** | Recurring *expense* rules (frequency, start/end date, category) and skipped date tracking. | `ForeignKey(User)` <br> • `ForeignKey(Category, SET_NULL)` |
 | **`PaycheckTemplate`** | Recurring salary rules (frequency, start date, source) and skipped date tracking. | `ForeignKey(User)` |
 | **`PaycheckTransaction`** | Historical and auto-generated income entries. | `ForeignKey(User)` <br> • `ForeignKey(PaycheckTemplate, SET_NULL)` |
+| **`Profile`** | Per-user profile holding the uploaded avatar. | `OneToOneField(User, CASCADE)` |
+
+Both recurring templates share a `RecurringSchedule` mixin that projects
+occurrence dates from `frequency` / `start_date` / `end_date`, minus any dates
+the user has explicitly skipped.
 
 ---
 
@@ -75,18 +85,41 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Run Migrations & Seed Admin User
+### 4. Create a `.env` file
+`DEBUG` defaults to off, which turns on `SECURE_SSL_REDIRECT` and the hashed
+static-file manifest — neither works under `runserver`. Local development needs
+`DEBUG` on:
+
 ```bash
-python manage.py makemigrations
+cat > .env <<'ENV'
+DEBUG=True
+SECRET_KEY=any-value-works-when-DEBUG-is-True
+ENV
+```
+
+With `DEBUG` off, `SECRET_KEY` is mandatory and `CSRF_TRUSTED_ORIGINS` must
+list the deployment's own origins (comma-separated).
+
+### 5. Run Migrations & Seed Admin User
+```bash
 python manage.py migrate
 
 # Create superuser for Django Admin access
 python manage.py createsuperuser
 ```
 
-### 5. Start Development Server
+### 6. Start Development Server
 ```bash
 python manage.py runserver
+```
+
+### Running the tests
+`collectstatic` must run first to build the static manifest, since Django's test
+runner forces `DEBUG=False`:
+
+```bash
+python manage.py collectstatic --noinput
+python manage.py test
 ```
 
 ---
@@ -94,8 +127,9 @@ python manage.py runserver
 - Transactions: Add import functionality for CC transactions (CSVs)
   - Done: WS, RBC, TD
   - To do: Pennywise exports, CIBC, Scotiabank, Simplii, Amex, BMO
-- Add settings page (under user profile) - put dark mode, export data. Change current settings to "budget config" owtte
-- Analytics: Sankey? ML? Time-series analyses? open to suggestions
+- ~~Add settings page (under user profile) - put dark mode, export data~~ — done
+- Change current settings to "budget config" owtte
+- Analytics: ~~Sankey~~ done. ML? Time-series analyses? open to suggestions
 - Deploy and UAT with friends
 - Mobile app
 
