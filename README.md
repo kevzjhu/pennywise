@@ -128,9 +128,10 @@ python manage.py test
   - Done: WS, RBC, TD
   - To do: Pennywise exports, CIBC, Scotiabank, Simplii, Amex, BMO
 - ~~Add settings page (under user profile) - put dark mode, export data~~ — done
-- Change current settings to "budget config" owtte
 - Analytics: ~~Sankey~~ done. ML? Time-series analyses? open to suggestions
 - Deploy and UAT with friends
+- Pressing PFP should open up settings
+- Include KPIs for transactions and income on top of both transaction and income pages
 - Mobile app
 
 ---
