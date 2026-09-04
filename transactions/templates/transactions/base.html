@@ -103,13 +103,15 @@
             <!-- Expanded Profile View -->
             <div class="sidebar-text flex items-center justify-between p-2 rounded-xl bg-gray-50 dark:bg-gray-700/50 overflow-hidden">
                 <div class="flex items-center gap-2.5 overflow-hidden">
-                    {% if user.profile.avatar %}
-                    <img src="{{ user.profile.avatar.url }}" alt="{{ user.username }}" class="w-8 h-8 rounded-full object-cover shrink-0 border border-gray-200 dark:border-gray-600">
-                    {% else %}
-                    <div class="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-300 font-bold flex items-center justify-center text-xs shrink-0" title="{{ user.username }}">
-                        {{ user.username|first|upper }}
-                    </div>
-                    {% endif %}
+                    <a href="{% url 'settings' %}" title="Open Settings" class="shrink-0">
+                        {% if user.profile.avatar %}
+                        <img src="{{ user.profile.avatar.url }}" alt="{{ user.username }}" class="w-8 h-8 rounded-full object-cover border border-gray-200 dark:border-gray-600">
+                        {% else %}
+                        <div class="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-300 font-bold flex items-center justify-center text-xs" title="{{ user.username }}">
+                            {{ user.username|first|upper }}
+                        </div>
+                        {% endif %}
+                    </a>
                     <div class="truncate">
                         <p class="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate">{{ user.username }}</p>
                     </div>
@@ -124,14 +126,9 @@
 
             <!-- Collapsed Profile View (Smooth Opacity Transition & Matching Active Styling) -->
             <div class="sidebar-icon hidden w-full flex justify-center">
-                <form method="POST" action="{% url 'logout' %}" class="flex justify-center">
-                    {% csrf_token %}
-                    <button type="submit" 
-                            title="Sign Out ({{ user.username }})" 
-                            class="group relative w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400 transition-colors duration-200 cursor-pointer flex items-center justify-center shrink-0 overflow-hidden">
-                        
-                        <!-- Default State: Avatar Picture or Letter Initial (Fades Out on Hover) -->
-                        <div class="absolute inset-0 flex items-center justify-center transition-opacity duration-200 group-hover:opacity-0">
+                <div class="group relative w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400 transition-colors duration-200 flex items-center justify-center shrink-0 overflow-hidden">
+                    <a href="{% url 'settings' %}" title="Open Settings" class="absolute inset-0 flex items-center justify-center transition-opacity duration-200 group-hover:opacity-0">
+                        <div class="flex items-center justify-center">
                             {% if user.profile.avatar %}
                             <img src="{{ user.profile.avatar.url }}" alt="{{ user.username }}" class="w-7 h-7 rounded-full object-cover border border-gray-200 dark:border-gray-600">
                             {% else %}
@@ -140,16 +137,17 @@
                             </div>
                             {% endif %}
                         </div>
+                    </a>
 
-                        <!-- Hover State: Sign Out Door Icon (Fades In Smoothly on Hover) -->
-                        <div class="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                    <form method="POST" action="{% url 'logout' %}" class="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto">
+                        {% csrf_token %}
+                        <button type="submit" title="Sign Out ({{ user.username }})" class="w-full h-full flex items-center justify-center cursor-pointer">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
                             </svg>
-                        </div>
-                        
-                    </button>
-                </form>
+                        </button>
+                    </form>
+                </div>
             </div>
 
         </div>
