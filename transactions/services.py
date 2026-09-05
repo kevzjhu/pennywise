@@ -6,6 +6,7 @@ from .models import Transaction
 
 REQUIRED_WEALTHSIMPLE_COLUMNS = {'transaction_date', 'details', 'amount'}
 REQUIRED_RBC_COLUMNS = {'account type', 'transaction date', 'description 1', 'cad$'}
+REQUIRED_SCOTIABANK_COLUMNS = {'date', 'description', 'type of transaction', 'amount'}
 
 
 # ---------------------------------------------------------------------------
@@ -187,6 +188,66 @@ def validate_and_parse_td_csv(csv_file, user):
 
     if not candidate_rows:
         raise ValueError("No valid expense transactions were found in the uploaded TD CSV file.")
+
+    return candidate_rows
+
+
+def validate_and_parse_scotiabank_csv(csv_file, user):
+    """Validates Scotiabank CSVs and extracts debit transactions."""
+    if not csv_file or not csv_file.name.lower().endswith('.csv'):
+        raise ValueError("The uploaded file must be a .csv file.")
+
+    decoded_file = csv_file.read().decode('utf-8-sig').splitlines()
+    reader = csv.DictReader(decoded_file)
+
+    if not reader.fieldnames:
+        raise ValueError("The uploaded CSV is empty or invalid.")
+
+    fieldnames_set = {f.strip().lower() for f in reader.fieldnames if f}
+    if not REQUIRED_SCOTIABANK_COLUMNS.issubset(fieldnames_set):
+        raise ValueError(
+            "The uploaded CSV does not conform to the Scotiabank template. "
+            "Required columns: 'Date', 'Description', 'Type of Transaction', 'Amount'."
+        )
+
+    exact_matches, date_amount_matches = get_user_transaction_lookup_sets(user)
+    candidate_rows = []
+
+    for idx, row in enumerate(reader):
+        clean_row = {k.strip().lower(): v.strip() for k, v in row.items() if k and v}
+        if not clean_row:
+            continue
+
+        if clean_row.get('type of transaction', '').lower() != 'debit':
+            continue
+
+        raw_date = clean_row.get('date')
+        description = clean_row.get('description')
+        raw_amount = clean_row.get('amount')
+        if not raw_date or not description or not raw_amount:
+            continue
+
+        try:
+            tx_date = datetime.datetime.strptime(raw_date, '%Y-%m-%d').date()
+            amount = Decimal(raw_amount)
+            if amount <= 0:
+                continue
+        except (ValueError, InvalidOperation):
+            continue
+
+        status, is_duplicate, selected = check_duplicate_status(
+            tx_date, amount, description, exact_matches, date_amount_matches
+        )
+
+        candidate_rows.append({
+            'index': idx,
+            'date': tx_date.strftime('%Y-%m-%d'),
+            'description': description,
+            'amount': f"{amount:.2f}",
+            'status': status,
+            'is_duplicate': is_duplicate,
+            'selected': selected
+        })
 
     return candidate_rows
 

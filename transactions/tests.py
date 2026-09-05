@@ -18,6 +18,7 @@ from transactions.forms import TransactionForm
 from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
 import io
+from transactions.services import validate_and_parse_scotiabank_csv
 
 # Create your tests here.
 
@@ -42,6 +43,37 @@ class CategoryModelTest(TestCase):
 
     def test_category_str(self):
         self.assertEqual(str(self.category), 'TestGroceries')
+
+
+class ScotiabankCsvParserTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='scotiauser', password='testpass')
+
+    def test_parses_debits_and_skips_credits_and_non_positive_amounts(self):
+        csv_content = (
+            'Filter,Date,Description,Sub-description,Status,Type of Transaction,Amount\n'
+            ',2026-08-30,Food Basics,Hamilton On,posted,Debit,18.36\n'
+            ',2026-08-17,Cash Back,,,posted,Credit,-79.99\n'
+            ',2026-08-18,Invalid Debit,,,posted,Debit,-1.00\n'
+            ',2026-08-19,Zero Debit,,,posted,Debit,0.00\n'
+        )
+        csv_file = SimpleUploadedFile('scotiabank.csv', csv_content.encode('utf-8'))
+
+        rows = validate_and_parse_scotiabank_csv(csv_file, self.user)
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['date'], '2026-08-30')
+        self.assertEqual(rows[0]['description'], 'Food Basics')
+        self.assertEqual(rows[0]['amount'], '18.36')
+
+    def test_rejects_csv_without_required_columns(self):
+        csv_file = SimpleUploadedFile(
+            'scotiabank.csv',
+            b'Date,Description,Amount\n2026-08-30,Food Basics,18.36\n',
+        )
+
+        with self.assertRaisesMessage(ValueError, 'Scotiabank template'):
+            validate_and_parse_scotiabank_csv(csv_file, self.user)
 
 
 class RecurringTransactionTemplateTest(TestCase):

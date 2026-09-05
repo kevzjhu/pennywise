@@ -18,7 +18,12 @@ from .analytics import (
     build_sankey_flows,
     total_amount,
 )
-from .services import validate_and_parse_wealthsimple_csv, validate_and_parse_rbc_csv, validate_and_parse_td_csv
+from .services import (
+    validate_and_parse_wealthsimple_csv,
+    validate_and_parse_rbc_csv,
+    validate_and_parse_td_csv,
+    validate_and_parse_scotiabank_csv,
+)
 
 
 def parse_amount_param(raw):
@@ -164,6 +169,7 @@ CSV_PARSERS = {
     'wealthsimple': validate_and_parse_wealthsimple_csv,
     'rbc': validate_and_parse_rbc_csv,
     'td': validate_and_parse_td_csv,
+    'scotiabank': validate_and_parse_scotiabank_csv,
 }
 
 
