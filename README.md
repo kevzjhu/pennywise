@@ -125,13 +125,14 @@ python manage.py test
 ---
 ## 📝 To Do List:
 - Transactions: Add import functionality for CC transactions (CSVs)
-  - Done: WS, RBC, TD
-  - To do: Pennywise exports, CIBC, Scotiabank, Simplii, Amex, BMO
+  - Done: WS, RBC, TD, Scotiabank
+  - To do: Pennywise exports, CIBC, Simplii, Amex, BMO
 - ~~Add settings page (under user profile) - put dark mode, export data~~ — done
 - Analytics: ~~Sankey~~ done. ML? Time-series analyses? open to suggestions
 - ~~Deploy and UAT with friends~~
 - ~~Pressing PFP should open up settings~~
 - Include KPIs for transactions and income on top of both transaction and income pages
+- self host 
 - Mobile app
 
 ---

@@ -1,3 +1,4 @@
+from .forms import TransactionForm, BulkCategoryForm
 from django.test import TestCase
 from django.contrib.auth.models import User
 from decimal import Decimal
@@ -12,8 +13,6 @@ from transactions.models import (
 )
 from transactions.analytics import budget_for_period, budget_status, build_sankey_flows
 from dateutil.relativedelta import relativedelta
-
-from transactions.forms import TransactionForm
 
 from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -156,6 +155,16 @@ class TransactionFormTest(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn('notes', form.errors)
 
+    def test_bulk_category_form_is_scoped_to_user(self):
+        other_user = User.objects.create_user(username='otheruser', password='testpass')
+        other_category = Category.objects.create(user=other_user, name='Other')
+
+        form = BulkCategoryForm(data={'category': other_category.id})
+        form.fields['category'].queryset = Category.objects.filter(user=self.user)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn('category', form.errors)
+
 class HomeViewTest(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='testuser', password='testpass')
@@ -224,6 +233,101 @@ class HomeViewTest(TestCase):
         }, follow=True)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Transaction.objects.filter(user=self.user).count(), 1)
+
+    def test_bulk_edit_category_updates_selected_transactions_only(self):
+        old_category = Category.objects.create(user=self.user, name='Old')
+        new_category = Category.objects.create(user=self.user, name='New')
+        transactions = [
+            Transaction.objects.create(
+                user=self.user,
+                date='2026-08-01',
+                description=f'Tx{i}',
+                amount=10,
+                category=old_category,
+            )
+            for i in range(3)
+        ]
+
+        response = self.client.post(reverse('home'), {
+            'action_type': 'bulk_edit_category',
+            'transaction_ids': [transactions[0].id, transactions[1].id],
+            'category': new_category.id,
+        }, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        transactions[0].refresh_from_db()
+        transactions[1].refresh_from_db()
+        transactions[2].refresh_from_db()
+        self.assertEqual(transactions[0].category, new_category)
+        self.assertEqual(transactions[1].category, new_category)
+        self.assertEqual(transactions[2].category, old_category)
+
+    def test_bulk_edit_category_rejects_other_users_category(self):
+        transaction = Transaction.objects.create(
+            user=self.user, date='2026-08-01', description='Tx', amount=10
+        )
+        other_user = User.objects.create_user(username='otheruser', password='testpass')
+        other_category = Category.objects.create(user=other_user, name='Other')
+
+        response = self.client.post(reverse('home'), {
+            'action_type': 'bulk_edit_category',
+            'transaction_ids': [transaction.id],
+            'category': other_category.id,
+        })
+
+        self.assertEqual(response.status_code, 200)
+        transaction.refresh_from_db()
+        self.assertIsNone(transaction.category)
+
+    def test_bulk_edit_category_requires_a_category(self):
+        transaction = Transaction.objects.create(
+            user=self.user, date='2026-08-01', description='Tx', amount=10
+        )
+
+        response = self.client.post(reverse('home'), {
+            'action_type': 'bulk_edit_category',
+            'transaction_ids': [transaction.id],
+        })
+
+        self.assertEqual(response.status_code, 200)
+        transaction.refresh_from_db()
+        self.assertIsNone(transaction.category)
+
+    def test_bulk_edit_category_ignores_other_users_transactions(self):
+        category = Category.objects.create(user=self.user, name='New')
+        other_user = User.objects.create_user(username='otheruser', password='testpass')
+        other_transaction = Transaction.objects.create(
+            user=other_user, date='2026-08-01', description='Other Tx', amount=10
+        )
+
+        response = self.client.post(reverse('home'), {
+            'action_type': 'bulk_edit_category',
+            'transaction_ids': [other_transaction.id],
+            'category': category.id,
+        })
+
+        self.assertEqual(response.status_code, 302)
+        other_transaction.refresh_from_db()
+        self.assertIsNone(other_transaction.category)
+
+    def test_bulk_edit_category_htmx_returns_table_partial(self):
+        category = Category.objects.create(user=self.user, name='New')
+        transaction = Transaction.objects.create(
+            user=self.user, date='2026-08-01', description='Tx', amount=10
+        )
+
+        response = self.client.post(
+            reverse('home'),
+            {
+                'action_type': 'bulk_edit_category',
+                'transaction_ids': [transaction.id],
+                'category': category.id,
+            },
+            HTTP_HX_REQUEST='true',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'transactions/_table.html')
 
 
 class AnalyticsViewTest(TestCase):

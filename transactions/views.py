@@ -6,6 +6,7 @@ from django.contrib.auth import login, update_session_auth_hash
 from django.contrib import messages
 from django.http import HttpResponse
 from .forms import TransactionForm, PaycheckTransactionForm, PaycheckTemplateForm, RecurringTransactionTemplateForm, ProfileForm
+from .forms import TransactionForm, BulkCategoryForm, PaycheckTransactionForm, PaycheckTemplateForm, RecurringTransactionTemplateForm, ProfileForm
 from .models import Transaction, PaycheckTransaction, PaycheckTemplate, Category, CategoryBudget, RecurringTransactionTemplate, Profile
 from django.db import transaction as db_transaction
 from decimal import Decimal, InvalidOperation
@@ -159,6 +160,7 @@ def get_home_context(request, sync=True):
 
     return {
         'form': category_scoped_form(TransactionForm, request.user),
+        'bulk_edit_form': category_scoped_form(BulkCategoryForm, request.user),
         'recurring_form': category_scoped_form(RecurringTransactionTemplateForm, request.user),
         'transactions': filters.page_of(transactions),
         'active_templates': active_templates,
@@ -314,6 +316,23 @@ def home(request):
                     Transaction.objects.filter(user=request.user, id__in=transaction_ids),
                     'recurring_template',
                 )
+
+        elif action_type == 'bulk_edit_category':
+            form = category_scoped_form(BulkCategoryForm, request.user, data=request.POST)
+            if form.is_valid():
+                transaction_ids = request.POST.getlist('transaction_ids')
+                if transaction_ids:
+                    with db_transaction.atomic():
+                        Transaction.objects.filter(
+                            user=request.user,
+                            id__in=transaction_ids,
+                        ).update(category=form.cleaned_data['category'])
+            else:
+                context = get_home_context(request, sync=False)
+                context['bulk_edit_form'] = form
+                if request.headers.get('HX-Request'):
+                    return render(request, "transactions/_table.html", context)
+                return render(request, "transactions/home.html", context)
 
         # Deleting a rule card leaves its posted transactions alone (SET_NULL).
         elif request.POST.get('delete_rule_id'):

@@ -50,6 +50,16 @@ class TransactionForm(forms.ModelForm):
             raise forms.ValidationError("Notes cannot exceed 200 characters.")
         return notes
 
+class BulkCategoryForm(forms.Form):
+    category = forms.ModelChoiceField(
+        queryset=Category.objects.none(),
+        required=True,
+        empty_label="Assign category...",
+        widget=forms.Select(attrs={
+            'class': 'text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-2 py-1.5 focus:ring-blue-500 focus:border-blue-500'
+        })
+    )
+
 class PaycheckTemplateForm(forms.ModelForm):
     class Meta:
         model = PaycheckTemplate
